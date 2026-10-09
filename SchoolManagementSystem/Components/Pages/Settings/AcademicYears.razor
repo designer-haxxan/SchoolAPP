@@ -1,0 +1,114 @@
+@page "/settings/years"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Policy = "AdminOnly")]
+@inject SettingsService SettingsSvc
+
+<PageTitle>Academic Years - Settings</PageTitle>
+
+<div class="page-header">
+    <h1 class="page-title"><i class="bi bi-calendar3 me-2"></i>Academic Years</h1>
+</div>
+
+<ul class="nav nav-tabs mb-4">
+    <li class="nav-item"><a class="nav-link" href="/settings/profile">School Profile</a></li>
+    <li class="nav-item"><a class="nav-link active" href="/settings/years">Academic Years</a></li>
+    <li class="nav-item"><a class="nav-link" href="/settings/feeheads">Fee Heads</a></li>
+    <li class="nav-item"><a class="nav-link" href="/settings/grades">Grade Config</a></li>
+</ul>
+
+<div class="row">
+    <div class="col-lg-7">
+        <div class="school-card mb-4">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <h6 class="mb-0">Academic Years</h6>
+                <button class="btn btn-primary btn-sm" @onclick="() => { _form = new AcademicYear(); _showForm = true; }">
+                    <i class="bi bi-plus-circle me-1"></i> Add Year
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <table class="table-school w-100">
+                    <thead><tr><th>Year Name</th><th>Start Date</th><th>End Date</th><th>Status</th><th>Actions</th></tr></thead>
+                    <tbody>
+                        @foreach (var y in _years)
+                        {
+                            <tr>
+                                <td><strong>@y.Name</strong></td>
+                                <td>@y.StartDate.ToString("dd MMM yyyy")</td>
+                                <td>@y.EndDate.ToString("dd MMM yyyy")</td>
+                                <td>
+                                    @if (y.IsCurrent)
+                                    { <span class="badge-status badge-active">Current</span> }
+                                    else
+                                    { <span class="badge-status badge-inactive">Inactive</span> }
+                                </td>
+                                <td>
+                                    @if (!y.IsCurrent)
+                                    {
+                                        <button class="btn btn-sm btn-outline-success me-1" @onclick="() => SetCurrentAsync(y.Id)">Set Current</button>
+                                    }
+                                    <button class="btn btn-sm btn-outline-primary" @onclick="() => EditYear(y)"><i class="bi bi-pencil"></i></button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    @if (_showForm)
+    {
+        <div class="col-lg-5">
+            <div class="school-card">
+                <div class="card-header"><h6>@(_form.Id == 0 ? "Add" : "Edit") Academic Year</h6></div>
+                <div class="card-body">
+                    <EditForm Model="_form" OnValidSubmit="SaveYearAsync">
+                        <DataAnnotationsValidator />
+                        <div class="mb-3">
+                            <label class="form-label form-label-required">Year Name</label>
+                            <InputText @bind-Value="_form.Name" class="form-control" placeholder="e.g. 2025-2026" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label form-label-required">Start Date</label>
+                            <InputDate @bind-Value="_form.StartDate" class="form-control" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label form-label-required">End Date</label>
+                            <InputDate @bind-Value="_form.EndDate" class="form-control" />
+                        </div>
+                        <div class="mb-3 form-check">
+                            <InputCheckbox @bind-Value="_form.IsCurrent" class="form-check-input" id="isCurrent" />
+                            <label class="form-check-label" for="isCurrent">Set as Current Year</label>
+                        </div>
+                        <button type="submit" class="btn btn-primary me-2">Save</button>
+                        <button type="button" class="btn btn-outline-secondary" @onclick="() => _showForm = false">Cancel</button>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<AcademicYear> _years = new();
+    private AcademicYear _form = new();
+    private bool _showForm;
+
+    protected override async Task OnInitializedAsync() => _years = await SettingsSvc.GetAcademicYearsAsync();
+
+    private void EditYear(AcademicYear y) { _form = new AcademicYear { Id = y.Id, Name = y.Name, StartDate = y.StartDate, EndDate = y.EndDate, IsCurrent = y.IsCurrent }; _showForm = true; }
+
+    private async Task SaveYearAsync()
+    {
+        if (_form.Id == 0) await SettingsSvc.CreateAcademicYearAsync(_form);
+        else await SettingsSvc.UpdateAcademicYearAsync(_form);
+        _years = await SettingsSvc.GetAcademicYearsAsync();
+        _showForm = false;
+    }
+
+    private async Task SetCurrentAsync(int id)
+    {
+        await SettingsSvc.SetCurrentYearAsync(id);
+        _years = await SettingsSvc.GetAcademicYearsAsync();
+    }
+}

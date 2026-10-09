@@ -1,0 +1,128 @@
+@page "/teachers/{Id:int}"
+@rendermode InteractiveServer
+@using SchoolManagementSystem.Data.Models
+@using SchoolManagementSystem.Services
+@inject TeacherService TeacherService
+@inject AttendanceService AttendanceService
+@attribute [Authorize(Policy = "StaffOnly")]
+
+<PageTitle>Teacher Profile</PageTitle>
+
+@if (teacher == null)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="mb-1"><i class="bi bi-person-badge me-2 text-primary"></i>Teacher Profile</h4>
+            <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
+                <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="/teachers">Teachers</a></li>
+                <li class="breadcrumb-item active">@teacher.FullName</li>
+            </ol></nav>
+        </div>
+        <a href="/teachers/@Id/edit" class="btn btn-primary"><i class="bi bi-pencil me-1"></i>Edit</a>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-4">
+            <div class="card shadow-sm text-center p-4">
+                <div class="avatar-xl bg-primary rounded-circle d-flex align-items-center justify-content-center text-white mx-auto mb-3" style="width:100px;height:100px;font-size:2.5rem;">
+                    @teacher.FirstName[0]
+                </div>
+                <h5 class="mb-1">@teacher.FullName</h5>
+                <p class="text-muted">@teacher.Qualification</p>
+                <span class="badge @(teacher.IsActive ? "bg-success" : "bg-danger") mb-3">@(teacher.IsActive ? "Active" : "Inactive")</span>
+                <hr />
+                <div class="text-start small">
+                    <p><i class="bi bi-credit-card me-2 text-muted"></i><strong>Code:</strong> @teacher.EmployeeCode</p>
+                    <p><i class="bi bi-person-vcard me-2 text-muted"></i><strong>CNIC:</strong> @teacher.CNIC</p>
+                    <p><i class="bi bi-phone me-2 text-muted"></i><strong>Phone:</strong> @teacher.Phone</p>
+                    <p><i class="bi bi-envelope me-2 text-muted"></i><strong>Email:</strong> @teacher.Email</p>
+                    <p><i class="bi bi-calendar me-2 text-muted"></i><strong>Joined:</strong> @teacher.JoiningDate.ToString("dd MMM yyyy")</p>
+                    <p><i class="bi bi-currency-dollar me-2 text-muted"></i><strong>Salary:</strong> PKR @teacher.MonthlySalary.ToString("N0")</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white fw-semibold"><i class="bi bi-book me-2"></i>Assigned Classes & Subjects</div>
+                <div class="card-body">
+                    @if (teacher.ClassSubjects?.Count > 0)
+                    {
+                        <table class="table table-sm">
+                            <thead><tr><th>Class</th><th>Section</th><th>Subject</th></tr></thead>
+                            <tbody>
+                                @foreach (var cs in teacher.ClassSubjects)
+                                {
+                                    <tr>
+                                        <td>@cs.Class?.Name</td>
+                                        <td>—</td>
+                                        <td>@cs.Subject?.Name</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    else
+                    {
+                        <p class="text-muted">No subjects assigned yet.</p>
+                    }
+                </div>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-header bg-white fw-semibold d-flex justify-content-between">
+                    <span><i class="bi bi-calendar-check me-2"></i>Attendance (This Month)</span>
+                    <span class="badge bg-primary">@attendancePercent% Present</span>
+                </div>
+                <div class="card-body">
+                    @if (attendanceSummary.Count == 0)
+                    {
+                        <p class="text-muted">No attendance records.</p>
+                    }
+                    else
+                    {
+                        <div class="d-flex flex-wrap gap-1">
+                            @foreach (var a in attendanceSummary)
+                            {
+                                <span class="badge @GetAttBadge(a.Status) p-2" title="@a.Date.ToString("dd MMM")">@a.Date.Day</span>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+    Teacher? teacher;
+    List<TeacherAttendance> attendanceSummary = [];
+    int attendancePercent;
+
+    protected override async Task OnInitializedAsync()
+    {
+        teacher = await TeacherService.GetByIdAsync(Id);
+        if (teacher != null)
+        {
+            var now = DateTime.Now;
+            attendanceSummary = await AttendanceService.GetTeacherMonthlyAsync(Id, now.Month, now.Year);
+            var presentCount = attendanceSummary.Count(a => a.Status == AttendanceStatus.Present || a.Status == AttendanceStatus.Late);
+            attendancePercent = attendanceSummary.Count > 0 ? (int)(presentCount * 100.0 / attendanceSummary.Count) : 0;
+        }
+    }
+
+    string GetAttBadge(AttendanceStatus s) => s switch
+    {
+        AttendanceStatus.Present => "bg-success",
+        AttendanceStatus.Absent => "bg-danger",
+        AttendanceStatus.Late => "bg-warning text-dark",
+        AttendanceStatus.Leave => "bg-info",
+        _ => "bg-secondary"
+    };
+}

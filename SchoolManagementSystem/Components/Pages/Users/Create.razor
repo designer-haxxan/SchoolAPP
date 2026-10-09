@@ -1,0 +1,94 @@
+@page "/users/create"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Identity
+@using SchoolManagementSystem.Data
+@inject UserManager<ApplicationUser> UserManager
+@inject NavigationManager Nav
+@attribute [Authorize(Policy = "AdminOnly")]
+
+<PageTitle>Create User</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1"><i class="bi bi-person-plus me-2 text-primary"></i>Create User</h4>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
+            <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="/users">Users</a></li>
+            <li class="breadcrumb-item active">Create</li>
+        </ol></nav>
+    </div>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                @if (!string.IsNullOrEmpty(errorMsg))
+                { <div class="alert alert-danger">@errorMsg</div> }
+
+                <div class="mb-3">
+                    <label class="form-label">Full Name *</label>
+                    <input type="text" class="form-control" @bind="fullName" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Email *</label>
+                    <input type="email" class="form-control" @bind="email" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Password *</label>
+                    <input type="password" class="form-control" @bind="password" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Role *</label>
+                    <select class="form-select" @bind="role">
+                        <option value="">Select Role...</option>
+                        <option value="Admin">Admin</option>
+                        <option value="Teacher">Teacher</option>
+                        <option value="Accountant">Accountant</option>
+                        <option value="Parent">Parent</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <div class="form-check form-switch">
+                        <input type="checkbox" class="form-check-input" @bind="isActive" id="isActive" />
+                        <label class="form-check-label" for="isActive">Active</label>
+                    </div>
+                </div>
+                <div class="d-flex gap-2 justify-content-end">
+                    <a href="/users" class="btn btn-outline-secondary">Cancel</a>
+                    <button class="btn btn-primary" @onclick="HandleCreate" disabled="@isSaving">
+                        @if (isSaving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                        Create User
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    string fullName = "", email = "", password = "", role = "";
+    bool isActive = true, isSaving;
+    string errorMsg = "";
+
+    async Task HandleCreate()
+    {
+        if (string.IsNullOrWhiteSpace(fullName) || string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password) || string.IsNullOrWhiteSpace(role))
+        {
+            errorMsg = "All fields are required."; return;
+        }
+        isSaving = true; errorMsg = "";
+        var user = new ApplicationUser { UserName = email, Email = email, FullName = fullName, IsActive = isActive, EmailConfirmed = true };
+        var result = await UserManager.CreateAsync(user, password);
+        if (result.Succeeded)
+        {
+            await UserManager.AddToRoleAsync(user, role);
+            Nav.NavigateTo("/users");
+        }
+        else
+        {
+            errorMsg = string.Join(", ", result.Errors.Select(e => e.Description));
+        }
+        isSaving = false;
+    }
+}

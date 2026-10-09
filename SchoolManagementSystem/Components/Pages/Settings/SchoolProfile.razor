@@ -1,0 +1,148 @@
+@page "/settings"
+@page "/settings/profile"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Policy = "AdminOnly")]
+@inject SettingsService SettingsSvc
+@inject IJSRuntime JS
+
+<PageTitle>School Profile - Settings</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title"><i class="bi bi-gear-fill me-2"></i>School Profile</h1>
+        <p class="page-subtitle">Configure your school information</p>
+    </div>
+</div>
+
+<!-- Settings Tabs -->
+<ul class="nav nav-tabs mb-4">
+    <li class="nav-item"><a class="nav-link active" href="/settings/profile">School Profile</a></li>
+    <li class="nav-item"><a class="nav-link" href="/settings/years">Academic Years</a></li>
+    <li class="nav-item"><a class="nav-link" href="/settings/feeheads">Fee Heads</a></li>
+    <li class="nav-item"><a class="nav-link" href="/settings/grades">Grade Config</a></li>
+</ul>
+
+@if (_settings != null)
+{
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="school-card">
+                <div class="card-header"><h6><i class="bi bi-building me-2"></i>School Information</h6></div>
+                <div class="card-body">
+                    <EditForm Model="_settings" OnValidSubmit="SaveAsync">
+                        <DataAnnotationsValidator />
+                        <div class="form-section-title">Basic Information</div>
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-8">
+                                <label class="form-label form-label-required">School Name</label>
+                                <InputText @bind-Value="_settings.SchoolName" class="form-control" placeholder="Enter school name" />
+                                <ValidationMessage For="@(() => _settings.SchoolName)" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Registration No.</label>
+                                <InputText @bind-Value="_settings.RegistrationNumber" class="form-control" placeholder="e.g. LHR-2010-001" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Principal Name</label>
+                                <InputText @bind-Value="_settings.PrincipalName" class="form-control" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">City</label>
+                                <InputText @bind-Value="_settings.City" class="form-control" />
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Address</label>
+                                <InputTextArea @bind-Value="_settings.Address" class="form-control" rows="2" />
+                            </div>
+                        </div>
+                        <div class="form-section-title">Contact Details</div>
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Phone</label>
+                                <InputText @bind-Value="_settings.Phone" class="form-control" placeholder="042-XXXXXXX" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Email</label>
+                                <InputText @bind-Value="_settings.Email" class="form-control" type="email" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Website</label>
+                                <InputText @bind-Value="_settings.Website" class="form-control" placeholder="www.school.pk" />
+                            </div>
+                        </div>
+                        <div class="form-section-title">Fee Policy</div>
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-4">
+                                <label class="form-label">Default due day of month</label>
+                                <InputNumber @bind-Value="_settings.DefaultDueDay" class="form-control" min="1" max="28" />
+                                <div class="form-text">Pakistani schools usually use the 10th.</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Late fee (Rs.)</label>
+                                <InputNumber @bind-Value="_settings.LateFeeAmount" class="form-control" min="0" step="10" />
+                                <div class="form-text">Flat amount added once per voucher. 0 disables it.</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Grace days after due date</label>
+                                <InputNumber @bind-Value="_settings.LateFeeGraceDays" class="form-control" min="0" max="60" />
+                                <div class="form-text">Late fee starts after due date + grace days.</div>
+                            </div>
+                        </div>
+                        <div class="form-section-title">SMS Gateway (Optional)</div>
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-4">
+                                <label class="form-label">SMS Provider</label>
+                                <InputSelect @bind-Value="_settings.SmsGatewayProvider" class="form-select">
+                                    <option value="">-- None --</option>
+                                    <option value="Twilio">Twilio</option>
+                                    <option value="Jazz">Jazz SMS</option>
+                                    <option value="Telenor">Telenor SMS</option>
+                                </InputSelect>
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label">API Key</label>
+                                <InputText @bind-Value="_settings.SmsGatewayApiKey" class="form-control" type="password" placeholder="Enter API key" />
+                            </div>
+                        </div>
+                        @if (!string.IsNullOrEmpty(_message))
+                        {
+                            <div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible">
+                                @_message
+                                <button type="button" class="btn-close" @onclick="() => _message = null"></button>
+                            </div>
+                        }
+                        <button type="submit" class="btn btn-primary" disabled="@_saving">
+                            @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                            <i class="bi bi-check-circle me-1"></i> Save Settings
+                        </button>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private SchoolSettings _settings = new();
+    private string? _message;
+    private bool _isError, _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _settings = await SettingsSvc.GetSchoolSettingsAsync() ?? new SchoolSettings { SchoolName = "My School" };
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        try
+        {
+            await SettingsSvc.SaveSchoolSettingsAsync(_settings);
+            _message = "Settings saved successfully!";
+            _isError = false;
+        }
+        catch (Exception ex) { _message = $"Error: {ex.Message}"; _isError = true; }
+        finally { _saving = false; }
+    }
+}

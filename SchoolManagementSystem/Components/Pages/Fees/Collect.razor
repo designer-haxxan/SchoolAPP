@@ -1,0 +1,306 @@
+@page "/fees/collect"
+@rendermode InteractiveServer
+@using SchoolManagementSystem.Data.Models
+@using SchoolManagementSystem.Services
+@using Microsoft.AspNetCore.Components.Authorization
+@inject FeeService FeeService
+@inject StudentService StudentService
+@attribute [Authorize(Policy = "AccountantOrAdmin")]
+
+<PageTitle>Collect Fee Payment</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4 reveal">
+    <div>
+        <h4 class="mb-1"><i class="bi bi-cash-coin me-2 text-primary"></i>Collect Fee Payment</h4>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
+            <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="/fees/vouchers">Vouchers</a></li>
+            <li class="breadcrumb-item active">Collect Payment</li>
+        </ol></nav>
+    </div>
+</div>
+
+@if (lastReceiptId is int receiptId)
+{
+    <div class="receipt-banner reveal mb-4">
+        <div class="rb-check"><i class="bi bi-check-lg"></i></div>
+        <div class="flex-grow-1">
+            <div class="fw-semibold">Payment of @MoneyFormat.Pkr(lastAmount) recorded</div>
+            <small class="text-muted">Receipt <span class="fw-semibold">@lastReceiptNo</span></small>
+        </div>
+        <a href="/fees/receipt/@receiptId" target="_blank" class="btn btn-sm btn-success"><i class="bi bi-printer me-1"></i>Print Receipt</a>
+        <button type="button" class="btn-close ms-2" aria-label="Dismiss" @onclick="() => lastReceiptId = null"></button>
+    </div>
+}
+
+<div class="row g-4">
+    <div class="col-lg-5">
+        <div class="card shadow-sm reveal" style="--i:0">
+            <div class="card-header bg-white fw-semibold"><i class="bi bi-search me-2"></i>Find Student</div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Search by name or registration no.</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control" value="@searchTerm" @oninput="SearchStudent" placeholder="Type at least 2 characters..." />
+                    </div>
+                </div>
+                @if (searchResults.Count > 0)
+                {
+                    <div class="list-group">
+                        @{ int si = 0; }
+                        @foreach (var s in searchResults)
+                        {
+                            var delay = si++;
+                            <button class="list-group-item list-group-item-action reveal @(selectedStudent?.Id == s.Id ? "active" : "")"
+                                    style="--i:@delay" @onclick="() => SelectStudent(s)">
+                                <div class="fw-semibold">@s.FullName</div>
+                                <small>@s.RegistrationNumber — @s.Section?.Class?.Name @s.Section?.Name</small>
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-7">
+        @if (selectedStudent != null)
+        {
+            <div class="card shadow-sm mb-4 reveal" style="--i:1">
+                <div class="card-body d-flex align-items-center gap-3">
+                    <div class="student-avatar">@selectedStudent.FirstName.Substring(0, 1)</div>
+                    <div class="flex-grow-1">
+                        <div class="fw-semibold">@selectedStudent.FullName</div>
+                        <small class="text-muted">@selectedStudent.RegistrationNumber · @selectedStudent.Section?.Class?.Name @selectedStudent.Section?.Name · Father: @(selectedStudent.FatherName ?? "—")</small>
+                    </div>
+                    <div class="text-end">
+                        <div class="small text-muted">Total pending</div>
+                        <div class="fs-5 fw-bold @(totalPending > 0 ? "text-danger" : "text-success")"><span data-countup="@((long)totalPending)" data-prefix="Rs. "></span></div>
+                    </div>
+                </div>
+            </div>
+
+            @if (pendingVouchers.Count == 0)
+            {
+                <div class="alert alert-success reveal"><i class="bi bi-check-circle me-2"></i>No pending dues for this student.</div>
+            }
+            else
+            {
+                <div class="card shadow-sm reveal" style="--i:2">
+                    <div class="card-header bg-white fw-semibold">Pending Vouchers</div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0 small">
+                            <thead class="table-light">
+                                <tr><th>Month</th><th>Total</th><th>Late fee</th><th>Discount</th><th>Paid</th><th>Pending</th><th>Due</th><th>Status</th><th></th></tr>
+                            </thead>
+                            <tbody>
+                                @{ int ri = 0; }
+                                @foreach (var v in pendingVouchers)
+                                {
+                                    var rowDelay = ri++;
+                                    <tr class="reveal" style="--i:@rowDelay">
+                                        <td class="fw-semibold">@(new DateTime(v.Year, v.Month, 1).ToString("MMM yyyy"))</td>
+                                        <td>@v.TotalAmount.ToString("N0")</td>
+                                        <td class="@(v.LateFee > 0 ? "text-danger" : "text-muted")">@(v.LateFee > 0 ? v.LateFee.ToString("N0") : "—")</td>
+                                        <td class="text-success">@(v.Discount > 0 ? v.Discount.ToString("N0") : "—")</td>
+                                        <td>@v.PaidAmount.ToString("N0")</td>
+                                        <td class="text-danger fw-semibold">@v.PendingAmount.ToString("N0")</td>
+                                        <td>@v.DueDate.ToString("dd MMM")</td>
+                                        <td><span class="badge @StatusClass(v.Status)">@v.Status</span></td>
+                                        <td class="text-nowrap">
+                                            <button class="btn btn-sm btn-primary" @onclick="() => OpenCollect(v)">Pay</button>
+                                            <a class="btn btn-sm btn-outline-secondary" href="/fees/challan/@v.Id" target="_blank" title="Print challan"><i class="bi bi-printer"></i></a>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+
+            @if (recentPayments.Count > 0)
+            {
+                <div class="card shadow-sm mt-4 reveal" style="--i:3">
+                    <div class="card-header bg-white fw-semibold"><i class="bi bi-clock-history me-2"></i>Recent Receipts</div>
+                    <ul class="list-group list-group-flush">
+                        @foreach (var p in recentPayments)
+                        {
+                            <li class="list-group-item d-flex justify-content-between align-items-center small">
+                                <div>
+                                    <span class="fw-semibold">@p.ReceiptNumber</span>
+                                    <span class="text-muted ms-2">@p.PaidOn.ToString("dd MMM yyyy") · @p.Method</span>
+                                </div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="fw-semibold text-success">@MoneyFormat.Pkr(p.Amount)</span>
+                                    <a href="/fees/receipt/@p.Id" target="_blank" class="btn btn-sm btn-outline-secondary" title="Print receipt"><i class="bi bi-printer"></i></a>
+                                </div>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            }
+        }
+        else
+        {
+            <div class="empty-state reveal">
+                <div class="empty-orb"><i class="bi bi-person-plus"></i></div>
+                <p class="mt-3 mb-0">Search and select a student to see pending dues</p>
+            </div>
+        }
+    </div>
+</div>
+
+@if (activeVoucher != null)
+{
+    <div class="modal fade show d-block modal-backdrop-anim" style="background:rgba(15,23,42,0.5)">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content modal-anim">
+                <div class="modal-header">
+                    <h5 class="modal-title">Collect — @(new DateTime(activeVoucher.Year, activeVoucher.Month, 1).ToString("MMMM yyyy"))</h5>
+                    <button type="button" class="btn-close" @onclick="() => activeVoucher = null"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="pay-summary mb-3">
+                        <div><span class="text-muted small">Voucher</span><div class="fw-semibold">@activeVoucher.VoucherNumber</div></div>
+                        <div class="text-end"><span class="text-muted small">Pending</span><div class="fs-5 fw-bold text-danger">@MoneyFormat.Pkr(activeVoucher.PendingAmount)</div></div>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <label class="form-label">Amount received *</label>
+                            <input type="number" step="0.01" class="form-control" @bind="payAmount" min="0.01" max="@activeVoucher.PendingAmount" />
+                            <div class="form-text">Partial payments are allowed.</div>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Payment date *</label>
+                            <input type="date" class="form-control" @bind="payDate" max="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Payment method</label>
+                            <select class="form-select" @bind="payMethod">
+                                @foreach (var m in PaymentMethods.All)
+                                {
+                                    <option value="@m">@m</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Remarks</label>
+                            <input type="text" class="form-control" @bind="payRemarks" maxlength="300" placeholder="Optional (e.g. transaction ID)" />
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2 mt-3 flex-wrap">
+                        <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => payAmount = activeVoucher.PendingAmount">Pay full balance</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => payAmount = Math.Round(activeVoucher.PendingAmount / 2, 2)">Pay half</button>
+                    </div>
+                    @if (!string.IsNullOrEmpty(payError))
+                    {
+                        <div class="alert alert-danger mt-3 mb-0"><i class="bi bi-exclamation-triangle me-1"></i>@payError</div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="() => activeVoucher = null">Cancel</button>
+                    <button class="btn btn-success" @onclick="ProcessPayment" disabled="@isProcessing">
+                        @if (isProcessing) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                        <i class="bi bi-check-circle me-1"></i>Confirm Payment
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    string searchTerm = "";
+    List<Student> searchResults = [];
+    Student? selectedStudent;
+    List<FeeVoucher> pendingVouchers = [];
+    List<FeePayment> recentPayments = [];
+    FeeVoucher? activeVoucher;
+    decimal payAmount;
+    DateTime payDate = DateTime.Today;
+    string payMethod = PaymentMethods.Cash, payRemarks = "", payError = "";
+    bool isProcessing;
+    int? lastReceiptId;
+    string lastReceiptNo = "";
+    decimal lastAmount;
+    System.Threading.CancellationTokenSource? cts;
+
+    decimal totalPending => pendingVouchers.Sum(v => v.PendingAmount);
+
+    async Task SearchStudent(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? "";
+        cts?.Cancel(); cts = new();
+        try
+        {
+            await Task.Delay(300, cts.Token);
+            if (searchTerm.Length >= 2)
+            {
+                var yearId = await FeeService.GetCurrentYearIdAsync();
+                var (items, _) = await StudentService.GetAllAsync(yearId, searchTerm, null, null, StudentStatus.Active, 1, 10);
+                searchResults = items;
+            }
+            else searchResults.Clear();
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    async Task SelectStudent(Student s)
+    {
+        selectedStudent = s;
+        searchResults.Clear();
+        lastReceiptId = null;
+        await LoadStudentFinanceAsync();
+    }
+
+    async Task LoadStudentFinanceAsync()
+    {
+        if (selectedStudent is null) return;
+        pendingVouchers = await FeeService.GetPendingVouchersAsync(selectedStudent.Id);
+        recentPayments = await FeeService.GetRecentPaymentsForStudentAsync(selectedStudent.Id);
+    }
+
+    void OpenCollect(FeeVoucher v)
+    {
+        activeVoucher = v;
+        payAmount = v.PendingAmount;
+        payDate = DateTime.Today;
+        payMethod = PaymentMethods.Cash;
+        payRemarks = "";
+        payError = "";
+    }
+
+    async Task ProcessPayment()
+    {
+        isProcessing = true; payError = "";
+        try
+        {
+            var authState = AuthState is null ? null : await AuthState;
+            var collector = authState?.User.Identity?.Name ?? "system";
+
+            var payment = await FeeService.CollectPaymentAsync(
+                activeVoucher!.Id, payAmount, payDate, payMethod, collector, payRemarks);
+
+            lastReceiptId = payment.Id;
+            lastReceiptNo = payment.ReceiptNumber;
+            lastAmount = payment.Amount;
+            activeVoucher = null;
+            await LoadStudentFinanceAsync();
+        }
+        catch (InvalidOperationException ex) { payError = ex.Message; }
+        catch (Exception) { payError = "Payment could not be saved. Please try again."; }
+        finally { isProcessing = false; }
+    }
+
+    static string StatusClass(VoucherStatus s) => s switch
+    {
+        VoucherStatus.Paid => "bg-success",
+        VoucherStatus.Partial => "bg-warning text-dark",
+        VoucherStatus.Overdue => "bg-danger status-pulse",
+        _ => "bg-secondary"
+    };
+}

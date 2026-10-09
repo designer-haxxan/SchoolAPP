@@ -1,0 +1,172 @@
+@page "/communication"
+@page "/communication/announcements"
+@rendermode InteractiveServer
+@using SchoolManagementSystem.Data.Models
+@using SchoolManagementSystem.Services
+@inject AnnouncementService AnnouncementService
+@attribute [Authorize(Policy = "StaffOnly")]
+
+<PageTitle>Announcements</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1"><i class="bi bi-megaphone me-2 text-primary"></i>Announcements</h4>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
+            <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+            <li class="breadcrumb-item active">Announcements</li>
+        </ol></nav>
+    </div>
+    <button class="btn btn-primary" @onclick="() => OpenModal(null)"><i class="bi bi-plus-lg me-1"></i>New Announcement</button>
+</div>
+
+@if (isLoading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+}
+else
+{
+    <div class="row g-4">
+        @foreach (var a in announcements)
+        {
+            <div class="col-md-6">
+                <div class="card shadow-sm h-100 border-start border-4 @GetBorderColor(a.Type)">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <h6 class="fw-bold mb-0">@a.Title</h6>
+                            <div class="d-flex gap-1">
+                                <span class="badge @GetTypeBadge(a.Type) small">@a.Type</span>
+                                @if (!a.IsActive) { <span class="badge bg-secondary small">Inactive</span> }
+                            </div>
+                        </div>
+                        <p class="text-muted small mb-2">@a.Content</p>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted">
+                                <i class="bi bi-clock me-1"></i>@a.PublishedAt.ToString("dd MMM yyyy HH:mm")
+                                @if (a.ExpiresAt.HasValue) { <span class="ms-2">Expires: @a.ExpiresAt.Value.ToString("dd MMM")</span> }
+                            </small>
+                            <div class="d-flex gap-1">
+                                <button class="btn btn-sm btn-outline-primary" @onclick="() => OpenModal(a)"><i class="bi bi-pencil"></i></button>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => Delete(a.Id)"><i class="bi bi-trash"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+        @if (announcements.Count == 0)
+        {
+            <div class="col-12 text-center py-5 text-muted">
+                <i class="bi bi-megaphone display-4"></i><p class="mt-2">No announcements yet.</p>
+            </div>
+        }
+    </div>
+}
+
+@if (showModal)
+{
+    <div class="modal fade show d-block" style="background:rgba(0,0,0,0.5)">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(editModel.Id == 0 ? "New" : "Edit") Announcement</h5>
+                    <button type="button" class="btn-close" @onclick="() => showModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-8">
+                            <label class="form-label">Title *</label>
+                            <input type="text" class="form-control" @bind="editModel.Title" />
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label">Type</label>
+                            <select class="form-select" @bind="editModel.Type">
+                                @foreach (var t in Enum.GetValues<AnnouncementType>())
+                                { <option value="@t">@t</option> }
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Content *</label>
+                            <textarea class="form-control" rows="4" @bind="editModel.Content"></textarea>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Audience</label>
+                            <select class="form-select" @bind="editModel.Audience">
+                                @foreach (var a in Enum.GetValues<AudienceType>())
+                                { <option value="@a">@a</option> }
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Expires On</label>
+                            <input type="date" class="form-control" @bind="expiresAt" />
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input type="checkbox" class="form-check-input" @bind="editModel.IsActive" id="isActive" />
+                                <label class="form-check-label" for="isActive">Active</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="() => showModal = false">Cancel</button>
+                    <button class="btn btn-primary" @onclick="Save" disabled="@isSaving">
+                        @if (isSaving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                        Save
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    List<Announcement> announcements = [];
+    Announcement editModel = new();
+    DateTime? expiresAt;
+    bool isLoading = true, showModal, isSaving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        announcements = await AnnouncementService.GetAllAsync();
+        isLoading = false;
+    }
+
+    void OpenModal(Announcement? a)
+    {
+        editModel = a != null ? new Announcement { Id = a.Id, Title = a.Title, Content = a.Content, Type = a.Type, Audience = a.Audience, IsActive = a.IsActive } : new Announcement { IsActive = true, PublishedAt = DateTime.Now };
+        expiresAt = a?.ExpiresAt;
+        showModal = true;
+    }
+
+    async Task Save()
+    {
+        editModel.ExpiresAt = expiresAt;
+        isSaving = true;
+        await AnnouncementService.SaveAsync(editModel);
+        announcements = await AnnouncementService.GetAllAsync();
+        showModal = false; isSaving = false;
+    }
+
+    async Task Delete(int id)
+    {
+        await AnnouncementService.DeleteAsync(id);
+        announcements = await AnnouncementService.GetAllAsync();
+    }
+
+    string GetBorderColor(AnnouncementType t) => t switch
+    {
+        AnnouncementType.Notice => "border-primary",
+        AnnouncementType.ExamSchedule => "border-danger",
+        AnnouncementType.Holiday => "border-success",
+        AnnouncementType.Event => "border-warning",
+        _ => "border-secondary"
+    };
+
+    string GetTypeBadge(AnnouncementType t) => t switch
+    {
+        AnnouncementType.ExamSchedule => "bg-danger",
+        AnnouncementType.Holiday => "bg-success",
+        AnnouncementType.Event => "bg-warning text-dark",
+        _ => "bg-primary"
+    };
+}

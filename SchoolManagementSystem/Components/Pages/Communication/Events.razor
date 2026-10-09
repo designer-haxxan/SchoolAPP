@@ -1,0 +1,145 @@
+@page "/communication/events"
+@rendermode InteractiveServer
+@using SchoolManagementSystem.Data.Models
+@using SchoolManagementSystem.Services
+@inject AnnouncementService AnnouncementService
+@attribute [Authorize(Policy = "StaffOnly")]
+
+<PageTitle>School Events</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1"><i class="bi bi-calendar-event me-2 text-primary"></i>School Events & Holidays</h4>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
+            <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+            <li class="breadcrumb-item active">Events</li>
+        </ol></nav>
+    </div>
+    <button class="btn btn-primary" @onclick="() => OpenModal(null)"><i class="bi bi-plus-lg me-1"></i>Add Event</button>
+</div>
+
+@if (isLoading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+}
+else
+{
+    <div class="card shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr><th>Event</th><th>Date</th><th>Type</th><th>Holiday</th><th class="text-end">Actions</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var ev in events.OrderBy(e => e.StartDateTime))
+                    {
+                        <tr>
+                            <td>
+                                <div class="fw-semibold">@ev.Title</div>
+                                @if (!string.IsNullOrEmpty(ev.Description)) { <small class="text-muted">@ev.Description</small> }
+                            </td>
+                            <td>@ev.StartDateTime.ToString("dd MMM yyyy")</td>
+                            <td><span class="badge @GetEventBadge(ev.Type)">@ev.Type</span></td>
+                            <td>@(ev.IsHoliday ? "<span class='badge bg-danger'>Holiday</span>" : "—")</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => OpenModal(ev)"><i class="bi bi-pencil"></i></button>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => Delete(ev.Id)"><i class="bi bi-trash"></i></button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@if (showModal)
+{
+    <div class="modal fade show d-block" style="background:rgba(0,0,0,0.5)">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(editModel.Id == 0 ? "Add" : "Edit") Event</h5>
+                    <button type="button" class="btn-close" @onclick="() => showModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label">Title *</label>
+                            <input type="text" class="form-control" @bind="editModel.Title" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Description</label>
+                            <textarea class="form-control" rows="2" @bind="editModel.Description"></textarea>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Date *</label>
+                            <input type="datetime-local" class="form-control" @bind="editModel.StartDateTime" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Type</label>
+                            <select class="form-select" @bind="editModel.Type">
+                                @foreach (var t in Enum.GetValues<EventType>())
+                                { <option value="@t">@t</option> }
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input type="checkbox" class="form-check-input" @bind="editModel.IsHoliday" id="isHoliday" />
+                                <label class="form-check-label" for="isHoliday">Mark as Holiday (school closed)</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="() => showModal = false">Cancel</button>
+                    <button class="btn btn-primary" @onclick="Save" disabled="@isSaving">
+                        @if (isSaving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                        Save
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    List<SchoolEvent> events = [];
+    SchoolEvent editModel = new() { StartDateTime = DateTime.Today };
+    bool isLoading = true, showModal, isSaving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        events = await AnnouncementService.GetAllEventsAsync();
+        isLoading = false;
+    }
+
+    void OpenModal(SchoolEvent? e)
+    {
+        editModel = e != null ? new SchoolEvent { Id = e.Id, Title = e.Title, Description = e.Description, StartDateTime = e.StartDateTime, Type = e.Type, IsHoliday = e.IsHoliday } : new SchoolEvent { StartDateTime = DateTime.Today };
+        showModal = true;
+    }
+
+    async Task Save()
+    {
+        isSaving = true;
+        await AnnouncementService.SaveEventAsync(editModel);
+        events = await AnnouncementService.GetAllEventsAsync();
+        showModal = false; isSaving = false;
+    }
+
+    async Task Delete(int id)
+    {
+        await AnnouncementService.DeleteEventAsync(id);
+        events = await AnnouncementService.GetAllEventsAsync();
+    }
+
+    string GetEventBadge(EventType t) => t switch
+    {
+        EventType.Holiday => "bg-danger",
+        EventType.Academic => "bg-warning text-dark",
+        EventType.Sports => "bg-success",
+        EventType.Cultural => "bg-info",
+        _ => "bg-primary"
+    };
+}

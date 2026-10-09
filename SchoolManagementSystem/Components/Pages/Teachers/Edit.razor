@@ -1,0 +1,124 @@
+@page "/teachers/{Id:int}/edit"
+@rendermode InteractiveServer
+@using SchoolManagementSystem.Data.Models
+@using SchoolManagementSystem.Services
+@inject TeacherService TeacherService
+@inject NavigationManager Nav
+@attribute [Authorize(Policy = "AdminOnly")]
+
+<PageTitle>Edit Teacher</PageTitle>
+
+@if (teacher == null)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="mb-1"><i class="bi bi-pencil-square me-2 text-primary"></i>Edit Teacher</h4>
+            <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
+                <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="/teachers">Teachers</a></li>
+                <li class="breadcrumb-item active">@teacher.FullName</li>
+            </ol></nav>
+        </div>
+        <a href="/teachers/@Id" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Cancel</a>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            @if (!string.IsNullOrEmpty(errorMsg))
+            {
+                <div class="alert alert-danger">@errorMsg</div>
+            }
+            @if (saved)
+            {
+                <div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>Changes saved successfully.</div>
+            }
+            <EditForm Model="teacher" OnValidSubmit="Submit">
+                <DataAnnotationsValidator />
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">First Name *</label>
+                        <InputText class="form-control" @bind-Value="teacher.FirstName" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Last Name *</label>
+                        <InputText class="form-control" @bind-Value="teacher.LastName" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">CNIC</label>
+                        <InputText class="form-control" @bind-Value="teacher.CNIC" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Phone</label>
+                        <InputText class="form-control" @bind-Value="teacher.Phone" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Email</label>
+                        <InputText class="form-control" @bind-Value="teacher.Email" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Qualification</label>
+                        <InputText class="form-control" @bind-Value="teacher.Qualification" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Specialization</label>
+                        <InputText class="form-control" @bind-Value="teacher.Specialization" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Monthly Salary (PKR)</label>
+                        <InputNumber class="form-control" @bind-Value="teacher.MonthlySalary" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Joining Date</label>
+                        <InputDate class="form-control" @bind-Value="teacher.JoiningDate" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Bank Account</label>
+                        <InputText class="form-control" @bind-Value="teacher.BankAccount" />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Address</label>
+                        <InputTextArea class="form-control" rows="2" @bind-Value="teacher.Address" />
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check form-switch">
+                            <InputCheckbox class="form-check-input" @bind-Value="teacher.IsActive" id="isActive" />
+                            <label class="form-check-label" for="isActive">Active</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-4 d-flex gap-2 justify-content-end">
+                    <a href="/teachers/@Id" class="btn btn-outline-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-primary" disabled="@isSaving">
+                        @if (isSaving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                        Save Changes
+                    </button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+    Teacher? teacher;
+    string errorMsg = "";
+    bool isSaving, saved;
+
+    protected override async Task OnInitializedAsync()
+    {
+        teacher = await TeacherService.GetByIdAsync(Id);
+        if (teacher == null) Nav.NavigateTo("/teachers");
+    }
+
+    async Task Submit()
+    {
+        isSaving = true; errorMsg = ""; saved = false;
+        try { await TeacherService.UpdateAsync(teacher!); saved = true; }
+        catch (Exception ex) { errorMsg = ex.Message; }
+        finally { isSaving = false; }
+    }
+}

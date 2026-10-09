@@ -1,0 +1,24 @@
+/* Reset Blazor defaults — everything is handled by school-custom.css */
+html, body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+a, .btn-link { color: #4f46e5; }
+
+.valid.modified:not([type=checkbox]) { outline: 1px solid #10b981; }
+.invalid { outline: 1px solid #ef4444; }
+.validation-message { color: #ef4444; font-size: 0.78rem; margin-top: 3px; }
+
+.blazor-error-boundary {
+    background: #fef2f2;
+    border-top: 2px solid #fecaca;
+    color: #991b1b;
+    padding: 10px 20px;
+    font-size: 0.84rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.blazor-error-boundary::after { content: "An error has occurred. Reload the page." }
+
+#blazor-error-ui { display: none; }

@@ -1,0 +1,176 @@
+@page "/students/{Id:int}"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject StudentService StudentSvc
+@inject AttendanceService AttendanceSvc
+@inject FeeService FeeSvc
+@inject NavigationManager Nav
+
+<PageTitle>Student Profile</PageTitle>
+
+@if (_student == null)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+}
+else
+{
+    <div class="page-header">
+        <div class="d-flex align-items-center gap-3">
+            @if (!string.IsNullOrEmpty(_student.PhotoPath))
+            {
+                <img src="@_student.PhotoPath" class="rounded-circle" style="width:64px;height:64px;object-fit:cover;border:3px solid #1a237e;" />
+            }
+            else
+            {
+                <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center text-white" style="width:64px;height:64px;font-size:1.5rem;font-weight:700;">
+                    @_student.FirstName[0]
+                </div>
+            }
+            <div>
+                <h1 class="page-title mb-0">@_student.FullName</h1>
+                <p class="page-subtitle mb-0">
+                    <code>@_student.RegistrationNumber</code> •
+                    @(_student.Section != null ? $"{_student.Section.Class?.Name} — Section {_student.Section.Name}" : "Class Not Assigned") •
+                    Roll No. @_student.RollNumber
+                </p>
+            </div>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="/students/@Id/edit" class="btn btn-outline-primary"><i class="bi bi-pencil me-1"></i> Edit</a>
+            <a href="/students" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i> Back</a>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <!-- Personal Info -->
+        <div class="col-lg-4">
+            <div class="school-card">
+                <div class="card-header"><h6><i class="bi bi-person-fill me-2"></i>Personal Information</h6></div>
+                <div class="card-body">
+                    <table class="w-100" style="font-size:0.875rem;">
+                        <tr><td class="text-muted py-1" style="width:45%;">Father Name</td><td class="fw-semibold">@(_student.FatherName ?? "—")</td></tr>
+                        <tr><td class="text-muted py-1">Gender</td><td>@_student.Gender</td></tr>
+                        <tr><td class="text-muted py-1">Date of Birth</td><td>@_student.DateOfBirth.ToString("dd MMM yyyy")</td></tr>
+                        <tr><td class="text-muted py-1">B-Form No.</td><td>@(_student.BFormNumber ?? "—")</td></tr>
+                        <tr><td class="text-muted py-1">Religion</td><td>@(_student.Religion ?? "—")</td></tr>
+                        <tr><td class="text-muted py-1">Nationality</td><td>@_student.Nationality</td></tr>
+                        <tr><td class="text-muted py-1">Admission</td><td>@_student.AdmissionDate.ToString("dd MMM yyyy")</td></tr>
+                        <tr><td class="text-muted py-1">Status</td><td><span class="badge-status @GetStatusClass(_student.Status)">@_student.Status</span></td></tr>
+                        <tr><td class="text-muted py-1">Address</td><td>@(_student.CurrentAddress ?? "—")</td></tr>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Guardian Info -->
+            @if (_student.Guardian != null)
+            {
+                <div class="school-card mt-3">
+                    <div class="card-header"><h6><i class="bi bi-people-fill me-2"></i>Guardian Information</h6></div>
+                    <div class="card-body">
+                        <table class="w-100" style="font-size:0.875rem;">
+                            <tr><td class="text-muted py-1" style="width:45%;">Father</td><td class="fw-semibold">@_student.Guardian.FatherName</td></tr>
+                            <tr><td class="text-muted py-1">CNIC</td><td>@(_student.Guardian.FatherCNIC ?? "—")</td></tr>
+                            <tr><td class="text-muted py-1">Phone</td><td>@(_student.Guardian.FatherPhone ?? "—")</td></tr>
+                            <tr><td class="text-muted py-1">Occupation</td><td>@(_student.Guardian.FatherOccupation ?? "—")</td></tr>
+                            <tr><td class="text-muted py-1">Mother</td><td>@(_student.Guardian.MotherName ?? "—")</td></tr>
+                            <tr><td class="text-muted py-1">Emergency</td><td>@(_student.Guardian.EmergencyContact ?? "—")</td></tr>
+                        </table>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- Fee History + Attendance Summary -->
+        <div class="col-lg-8">
+            <!-- Attendance Summary -->
+            <div class="school-card mb-3">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <h6 class="mb-0"><i class="bi bi-calendar-check me-2"></i>Attendance (This Month)</h6>
+                    <span class="badge bg-primary">@_attendancePct%</span>
+                </div>
+                <div class="card-body">
+                    @if (_monthlyAttendance.Count == 0)
+                    {
+                        <p class="text-muted text-center mb-0">No attendance records for this month.</p>
+                    }
+                    else
+                    {
+                        <div class="d-flex flex-wrap gap-1">
+                            @foreach (var a in _monthlyAttendance)
+                            {
+                                <div class="text-center" style="width:36px;">
+                                    <div class="rounded" style="font-size:0.65rem;padding:3px 2px;background:@GetAttColor(a.Status);color:#fff;">
+                                        @a.Date.Day
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                        <div class="d-flex gap-3 mt-2" style="font-size:0.78rem;">
+                            <span><span style="background:#43a047;color:#fff;padding:1px 6px;border-radius:3px;">P</span> Present</span>
+                            <span><span style="background:#e53935;color:#fff;padding:1px 6px;border-radius:3px;">A</span> Absent</span>
+                            <span><span style="background:#fb8c00;color:#fff;padding:1px 6px;border-radius:3px;">L</span> Late</span>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Fee Vouchers -->
+            <div class="school-card">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <h6 class="mb-0"><i class="bi bi-receipt me-2"></i>Recent Fee Vouchers</h6>
+                    <a href="/fees/vouchers?studentId=@Id" class="btn btn-sm btn-outline-primary">View All</a>
+                </div>
+                <div class="card-body p-0">
+                    @if (_vouchers.Count == 0)
+                    {
+                        <p class="text-muted text-center py-3 mb-0">No fee vouchers found.</p>
+                    }
+                    else
+                    {
+                        <table class="table-school w-100">
+                            <thead><tr><th>Voucher No.</th><th>Month</th><th>Total</th><th>Paid</th><th>Pending</th><th>Status</th></tr></thead>
+                            <tbody>
+                                @foreach (var v in _vouchers.Take(6))
+                                {
+                                    <tr>
+                                        <td><code style="font-size:0.78rem;">@v.VoucherNumber</code></td>
+                                        <td>@(new DateTime(v.Year, v.Month, 1).ToString("MMM yyyy"))</td>
+                                        <td>Rs. @v.TotalAmount.ToString("N0")</td>
+                                        <td>Rs. @v.PaidAmount.ToString("N0")</td>
+                                        <td>Rs. @v.PendingAmount.ToString("N0")</td>
+                                        <td><span class="badge-status @GetVoucherClass(v.Status)">@v.Status</span></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private Student? _student;
+    private List<StudentAttendance> _monthlyAttendance = new();
+    private List<FeeVoucher> _vouchers = new();
+    private decimal _attendancePct;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _student = await StudentSvc.GetByIdAsync(Id);
+        if (_student == null) { Nav.NavigateTo("/students"); return; }
+
+        var now = DateTime.Now;
+        _monthlyAttendance = await AttendanceSvc.GetMonthlyStudentAttendanceAsync(Id, now.Month, now.Year);
+        _attendancePct = await AttendanceSvc.GetAttendancePercentageAsync(Id, now.Month, now.Year);
+        _vouchers = await FeeSvc.GetStudentVouchersAsync(Id);
+    }
+
+    private string GetStatusClass(StudentStatus s) => s switch { StudentStatus.Active => "badge-active", StudentStatus.Inactive => "badge-inactive", _ => "badge-pending" };
+    private string GetVoucherClass(VoucherStatus s) => s switch { VoucherStatus.Paid => "badge-paid", VoucherStatus.Pending => "badge-pending", VoucherStatus.Overdue => "badge-overdue", _ => "badge-partial" };
+    private string GetAttColor(AttendanceStatus s) => s switch { AttendanceStatus.Present => "#43a047", AttendanceStatus.Absent => "#e53935", AttendanceStatus.Late => "#fb8c00", _ => "#9c27b0" };
+}

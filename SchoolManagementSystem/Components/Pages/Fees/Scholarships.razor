@@ -1,0 +1,184 @@
+@page "/fees/scholarships"
+@rendermode InteractiveServer
+@using SchoolManagementSystem.Data.Models
+@using SchoolManagementSystem.Services
+@inject FeeService FeeService
+@inject StudentService StudentService
+@attribute [Authorize(Policy = "AccountantOrAdmin")]
+
+<PageTitle>Scholarships & Discounts</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1"><i class="bi bi-award me-2 text-primary"></i>Scholarships & Discounts</h4>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
+            <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+            <li class="breadcrumb-item active">Scholarships</li>
+        </ol></nav>
+    </div>
+    <button class="btn btn-primary" @onclick="() => OpenModal(null)"><i class="bi bi-plus-lg me-1"></i>Add Scholarship</button>
+</div>
+
+@if (isLoading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+}
+else if (scholarships.Count == 0)
+{
+    <div class="text-center py-5 text-muted"><i class="bi bi-award display-4"></i><p class="mt-2">No scholarships defined yet.</p></div>
+}
+else
+{
+    <div class="card shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr><th>Student</th><th>Class</th><th>Title</th><th>Type</th><th>Value</th><th>Actions</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var s in scholarships)
+                    {
+                        <tr>
+                            <td>@s.Student?.FullName</td>
+                            <td>@s.Student?.Section?.Class?.Name</td>
+                            <td>@s.Title</td>
+                            <td>
+                                @if (s.Type == ScholarshipType.Percentage)
+                                { <span class="badge bg-info">@s.Value% Off</span> }
+                                else
+                                { <span class="badge bg-success">PKR @s.Value.ToString("N0") Off</span> }
+                            </td>
+                            <td>@s.Value @(s.Type == ScholarshipType.Percentage ? "%" : "PKR")</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => OpenModal(s)"><i class="bi bi-pencil"></i></button>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteScholarship(s.Id)"><i class="bi bi-trash"></i></button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@if (showModal)
+{
+    <div class="modal fade show d-block" style="background:rgba(0,0,0,0.5)">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(editModel.Id == 0 ? "Add" : "Edit") Scholarship</h5>
+                    <button type="button" class="btn-close" @onclick="() => showModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Student</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" value="@studentSearch" @oninput="SearchStudents" placeholder="Type name..." />
+                        </div>
+                        @if (studentResults.Count > 0)
+                        {
+                            <div class="list-group mt-1">
+                                @foreach (var s in studentResults)
+                                {
+                                    <button class="list-group-item list-group-item-action py-1 small" @onclick="() => SelectStudent(s)">
+                                        @s.FullName — @s.RegistrationNumber
+                                    </button>
+                                }
+                            </div>
+                        }
+                        @if (editModel.StudentId > 0)
+                        {
+                            <small class="text-success">Selected: @selectedStudentName</small>
+                        }
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Title</label>
+                        <input type="text" class="form-control" @bind="editModel.Title" placeholder="e.g. Merit Scholarship" />
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <label class="form-label">Type</label>
+                            <select class="form-select" @bind="editModel.Type">
+                                @foreach (var t in Enum.GetValues<ScholarshipType>())
+                                { <option value="@t">@t</option> }
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Value</label>
+                            <input type="number" class="form-control" @bind="editModel.Value" min="0" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="() => showModal = false">Cancel</button>
+                    <button class="btn btn-primary" @onclick="Save" disabled="@isSaving">
+                        @if (isSaving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                        Save
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    List<Scholarship> scholarships = [];
+    Scholarship editModel = new();
+    bool isLoading, showModal, isSaving;
+    string studentSearch = "", selectedStudentName = "";
+    List<Student> studentResults = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+        scholarships = await FeeService.GetScholarshipsAsync();
+        isLoading = false;
+    }
+
+    void OpenModal(Scholarship? s)
+    {
+        editModel = s != null ? new Scholarship { Id = s.Id, StudentId = s.StudentId, Title = s.Title, Type = s.Type, Value = s.Value } : new Scholarship();
+        selectedStudentName = s?.Student?.FullName ?? "";
+        studentSearch = "";
+        showModal = true;
+    }
+
+    System.Threading.CancellationTokenSource? cts;
+    async Task SearchStudents(ChangeEventArgs e)
+    {
+        studentSearch = e.Value?.ToString() ?? "";
+        cts?.Cancel(); cts = new();
+        try
+        {
+            await Task.Delay(300, cts.Token);
+            if (studentSearch.Length >= 2)
+            {
+                var yearId = await FeeService.GetCurrentYearIdAsync();
+                var (items, _) = await StudentService.GetAllAsync(yearId, studentSearch, null, null, StudentStatus.Active, 1, 8);
+                studentResults = items;
+            }
+        }
+        catch { }
+    }
+
+    void SelectStudent(Student s)
+    {
+        editModel.StudentId = s.Id; selectedStudentName = s.FullName;
+        studentResults.Clear(); studentSearch = "";
+    }
+
+    async Task Save()
+    {
+        isSaving = true;
+        await FeeService.SaveScholarshipAsync(editModel);
+        scholarships = await FeeService.GetScholarshipsAsync();
+        showModal = false; isSaving = false;
+    }
+
+    async Task DeleteScholarship(int id)
+    {
+        await FeeService.DeleteScholarshipAsync(id);
+        scholarships = await FeeService.GetScholarshipsAsync();
+    }
+}

@@ -1,0 +1,245 @@
+@page "/students"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Policy = "StaffOnly")]
+@inject StudentService StudentSvc
+@inject ClassService ClassSvc
+@inject SettingsService SettingsSvc
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject ReportService ReportSvc
+
+<PageTitle>Students</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title"><i class="bi bi-people-fill me-2"></i>Students</h1>
+        <p class="page-subtitle">Total: <strong>@_totalCount</strong> students</p>
+    </div>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-success btn-sm" @onclick="ExportExcelAsync">
+            <i class="bi bi-file-earmark-excel me-1"></i> Export
+        </button>
+        <a href="/students/create" class="btn btn-primary">
+            <i class="bi bi-plus-circle me-1"></i> Add Student
+        </a>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="school-card mb-3">
+    <div class="card-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <div class="search-input-group">
+                    <i class="bi bi-search search-icon"></i>
+                    <input type="text" class="form-control" placeholder="Search by name, reg no, father name..." @bind="_searchTerm" @bind:event="oninput" @onkeyup="OnSearchKeyUp" />
+                </div>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" @onchange="OnClassChange">
+                    <option value="">All Classes</option>
+                    @foreach (var c in _classes)
+                    {
+                        <option value="@c.Id">@c.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" @onchange="OnSectionChange">
+                    <option value="">All Sections</option>
+                    @foreach (var s in _sections)
+                    {
+                        <option value="@s.Id">Section @s.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" @bind="_statusFilter" @bind:event="onchange" @bind:after="LoadAsync">
+                    <option value="">All Status</option>
+                    @foreach (var st in Enum.GetValues<StudentStatus>())
+                    {
+                        <option value="@st">@st</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-outline-secondary w-100" @onclick="ClearFilters">
+                    <i class="bi bi-x-circle me-1"></i> Clear
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Student Table -->
+<div class="school-card">
+    <div class="card-body p-0">
+        @if (_loading)
+        {
+            <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+        }
+        else if (_students.Count == 0)
+        {
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-people" style="font-size:3rem;"></i>
+                <p class="mt-2">No students found.</p>
+                <a href="/students/create" class="btn btn-primary">Add First Student</a>
+            </div>
+        }
+        else
+        {
+            <table class="table-school w-100">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Photo</th>
+                        <th>Name</th>
+                        <th>Reg No.</th>
+                        <th>Father Name</th>
+                        <th>Class</th>
+                        <th>Roll No.</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var (s, i) in _students.Select((s, i) => (s, (_page - 1) * _pageSize + i + 1)))
+                    {
+                        <tr>
+                            <td class="text-muted">@i</td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(s.PhotoPath))
+                                {
+                                    <img src="@s.PhotoPath" class="rounded-circle" style="width:32px;height:32px;object-fit:cover;" />
+                                }
+                                else
+                                {
+                                    <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center text-white" style="width:32px;height:32px;font-size:0.8rem;">
+                                        @s.FirstName[0]
+                                    </div>
+                                }
+                            </td>
+                            <td>
+                                <a href="/students/@s.Id" class="fw-semibold text-decoration-none">@s.FullName</a>
+                            </td>
+                            <td><code>@s.RegistrationNumber</code></td>
+                            <td>@(s.FatherName ?? "—")</td>
+                            <td>
+                                @if (s.Section != null)
+                                { <span>@s.Section.Class?.Name — Sec @s.Section.Name</span> }
+                                else { <span class="text-muted">Not Assigned</span> }
+                            </td>
+                            <td>@s.RollNumber</td>
+                            <td>
+                                <span class="badge-status @GetStatusClass(s.Status)">@s.Status</span>
+                            </td>
+                            <td>
+                                <div class="d-flex gap-1">
+                                    <a href="/students/@s.Id" class="btn btn-sm btn-outline-info" title="View"><i class="bi bi-eye"></i></a>
+                                    <a href="/students/@s.Id/edit" class="btn btn-sm btn-outline-primary" title="Edit"><i class="bi bi-pencil"></i></a>
+                                    <button class="btn btn-sm btn-outline-danger" title="Delete" @onclick="() => DeleteAsync(s.Id)"><i class="bi bi-trash"></i></button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            <!-- Pagination -->
+            <div class="d-flex align-items-center justify-content-between px-3 py-2 border-top">
+                <span class="pagination-info">Showing @((_page-1)*_pageSize+1)–@Math.Min(_page*_pageSize,_totalCount) of @_totalCount</span>
+                <div class="d-flex gap-1">
+                    <button class="btn btn-sm btn-outline-secondary" disabled="@(_page <= 1)" @onclick="() => GoToPage(_page - 1)">
+                        <i class="bi bi-chevron-left"></i>
+                    </button>
+                    @for (int p = 1; p <= _totalPages; p++)
+                    {
+                        var pg = p;
+                        <button class="btn btn-sm @(_page == pg ? "btn-primary" : "btn-outline-secondary")" @onclick="() => GoToPage(pg)">@pg</button>
+                    }
+                    <button class="btn btn-sm btn-outline-secondary" disabled="@(_page >= _totalPages)" @onclick="() => GoToPage(_page + 1)">
+                        <i class="bi bi-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private List<Student> _students = new();
+    private List<Class> _classes = new();
+    private List<Section> _sections = new();
+    private int _totalCount, _page = 1, _pageSize = 20, _totalPages;
+    private string? _searchTerm;
+    private int? _classFilter, _sectionFilter;
+    private StudentStatus? _statusFilter;
+    private bool _loading = true;
+    private int _currentYearId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var year = await SettingsSvc.GetCurrentYearAsync();
+        _currentYearId = year?.Id ?? 1;
+        _classes = await ClassSvc.GetAllAsync(_currentYearId);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        var (items, total) = await StudentSvc.GetAllAsync(_currentYearId, _searchTerm, _classFilter, _sectionFilter, _statusFilter, _page, _pageSize);
+        _students = items;
+        _totalCount = total;
+        _totalPages = (int)Math.Ceiling((double)total / _pageSize);
+        _loading = false;
+    }
+
+    private async Task OnClassChange(ChangeEventArgs e)
+    {
+        _classFilter = e.Value?.ToString() == "" ? null : int.TryParse(e.Value?.ToString(), out int id) ? id : null;
+        _sectionFilter = null;
+        _sections = _classFilter.HasValue ? await ClassSvc.GetSectionsAsync(_classFilter.Value) : new List<Section>();
+        _page = 1; await LoadAsync();
+    }
+
+    private async Task OnSectionChange(ChangeEventArgs e)
+    {
+        _sectionFilter = e.Value?.ToString() == "" ? null : int.TryParse(e.Value?.ToString(), out int id) ? id : null;
+        _page = 1; await LoadAsync();
+    }
+
+    private async Task OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") { _page = 1; await LoadAsync(); }
+    }
+
+    private async Task GoToPage(int p) { _page = p; await LoadAsync(); }
+
+    private async Task ClearFilters()
+    {
+        _searchTerm = null; _classFilter = null; _sectionFilter = null; _statusFilter = null; _sections = new(); _page = 1;
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync(int id)
+    {
+        await StudentSvc.DeleteAsync(id);
+        await LoadAsync();
+    }
+
+    private async Task ExportExcelAsync()
+    {
+        var bytes = await ReportSvc.ExportStudentsToExcelAsync(_currentYearId, _classFilter, _sectionFilter);
+        await JS.InvokeVoidAsync("downloadFile", "students.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
+    }
+
+    private string GetStatusClass(StudentStatus s) => s switch
+    {
+        StudentStatus.Active => "badge-active",
+        StudentStatus.Inactive => "badge-inactive",
+        StudentStatus.Transferred => "badge-pending",
+        _ => "badge-inactive"
+    };
+}

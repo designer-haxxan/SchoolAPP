@@ -1,0 +1,130 @@
+@page "/fees/challan/{VoucherId:int}"
+@layout SchoolManagementSystem.Components.Layout.PrintLayout
+@rendermode InteractiveServer
+@using SchoolManagementSystem.Data.Models
+@using SchoolManagementSystem.Services
+@inject FeeService FeeService
+@inject SettingsService SettingsService
+@attribute [Authorize(Policy = "AccountantOrAdmin")]
+
+<PageTitle>Fee Challan @(voucher?.VoucherNumber ?? "")</PageTitle>
+
+@if (voucher is null)
+{
+    <div class="alert alert-warning m-4">Voucher not found.</div>
+}
+else
+{
+    var student = voucher.Student!;
+    var monthLabel = new DateTime(voucher.Year, voucher.Month, 1).ToString("MMMM yyyy");
+    var isPaid = voucher.PendingAmount <= 0;
+
+    @foreach (var copy in new[] { "Office Copy", "Student Copy" })
+    {
+        <section class="challan-copy">
+            <header class="challan-head">
+                <div>
+                    <div class="challan-school">@(school?.SchoolName ?? "School")</div>
+                    <div class="challan-sub">@school?.Address @(string.IsNullOrWhiteSpace(school?.City) ? "" : "· " + school!.City)</div>
+                    <div class="challan-sub">@(string.IsNullOrWhiteSpace(school?.Phone) ? "" : "Tel: " + school!.Phone)</div>
+                </div>
+                <div class="text-end">
+                    <div class="challan-title">FEE CHALLAN</div>
+                    <div class="challan-sub">@copy</div>
+                </div>
+            </header>
+
+            <div class="challan-meta">
+                <div><span>Challan No.</span><strong>@voucher.VoucherNumber</strong></div>
+                <div><span>Fee Month</span><strong>@monthLabel</strong></div>
+                <div><span>Due Date</span><strong>@voucher.DueDate.ToString("dd MMM yyyy")</strong></div>
+            </div>
+
+            <div class="challan-student">
+                <div><span>Student</span><strong>@student.FullName</strong></div>
+                <div><span>Reg. No.</span><strong>@student.RegistrationNumber</strong></div>
+                <div><span>Father's Name</span><strong>@(student.FatherName ?? "—")</strong></div>
+                <div><span>Class / Section</span><strong>@student.Section?.Class?.Name @student.Section?.Name · Roll @student.RollNumber</strong></div>
+            </div>
+
+            <table class="challan-table">
+                <thead><tr><th>Description</th><th class="text-end">Amount (Rs.)</th></tr></thead>
+                <tbody>
+                    @foreach (var d in voucher.Details)
+                    {
+                        <tr><td>@d.FeeHead?.Name</td><td class="text-end">@d.Amount.ToString("N0")</td></tr>
+                    }
+                    <tr class="subtotal"><td>Total</td><td class="text-end">@voucher.TotalAmount.ToString("N0")</td></tr>
+                    @if (voucher.Discount > 0)
+                    {
+                        <tr><td>Scholarship / Discount @(string.IsNullOrWhiteSpace(voucher.DiscountReason) ? "" : "(" + voucher.DiscountReason + ")")</td><td class="text-end">− @voucher.Discount.ToString("N0")</td></tr>
+                    }
+                    @if (voucher.PaidAmount > 0)
+                    {
+                        <tr><td>Already paid</td><td class="text-end">− @voucher.PaidAmount.ToString("N0")</td></tr>
+                    }
+                </tbody>
+            </table>
+
+            @if (isPaid)
+            {
+                <div class="challan-paid-stamp">PAID</div>
+            }
+            else if (isOverdue)
+            {
+                <div class="challan-payable">
+                    <div class="challan-pay-box late">
+                        <span>Overdue: payable now (incl. late fee)</span>
+                        <strong>@MoneyFormat.Pkr(voucher.PendingAmount)</strong>
+                    </div>
+                </div>
+                <div class="challan-words">@MoneyFormat.ToWords(voucher.PendingAmount)</div>
+            }
+            else
+            {
+                <div class="challan-payable">
+                    <div class="challan-pay-box">
+                        <span>Payable before due date</span>
+                        <strong>@MoneyFormat.Pkr(payableBeforeDue)</strong>
+                    </div>
+                    <div class="challan-pay-box late">
+                        <span>Payable after @voucher.DueDate.ToString("dd MMM") (incl. late fee)</span>
+                        <strong>@MoneyFormat.Pkr(payableAfterDue)</strong>
+                    </div>
+                </div>
+                <div class="challan-words">@MoneyFormat.ToWords(payableBeforeDue)</div>
+            }
+
+            <footer class="challan-foot">
+                <div>
+                    <div>Pay at any branch of the bank, JazzCash, Easypaisa or the school accounts office.</div>
+                    <div>Please keep this copy for your records. Late fee applies after the due date.</div>
+                </div>
+                <div class="challan-sign">Cashier / Stamp</div>
+            </footer>
+        </section>
+        <div class="challan-cut">✂ - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -</div>
+    }
+}
+
+@code {
+    [Parameter] public int VoucherId { get; set; }
+
+    FeeVoucher? voucher;
+    SchoolSettings? school;
+    decimal payableBeforeDue, payableAfterDue;
+    bool isOverdue;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        school = await SettingsService.GetSchoolSettingsAsync();
+        voucher = await FeeService.GetVoucherByIdAsync(VoucherId);
+        if (voucher is null) return;
+
+        // Late fee is charged once the grace period passes; show the amount that will apply if not yet charged.
+        payableBeforeDue = voucher.TotalAmount - voucher.Discount - voucher.PaidAmount;
+        var lateCharge = voucher.LateFee > 0 ? voucher.LateFee : (school?.LateFeeAmount ?? 0);
+        payableAfterDue = payableBeforeDue + lateCharge;
+        isOverdue = voucher.DueDate.Date < DateTime.Today;
+    }
+}

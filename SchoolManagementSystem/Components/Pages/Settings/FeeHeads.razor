@@ -1,0 +1,92 @@
+@page "/settings/feeheads"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Policy = "AdminOnly")]
+@inject SettingsService SettingsSvc
+
+<PageTitle>Fee Heads - Settings</PageTitle>
+
+<div class="page-header">
+    <h1 class="page-title"><i class="bi bi-tags-fill me-2"></i>Fee Heads</h1>
+</div>
+
+<ul class="nav nav-tabs mb-4">
+    <li class="nav-item"><a class="nav-link" href="/settings/profile">School Profile</a></li>
+    <li class="nav-item"><a class="nav-link" href="/settings/years">Academic Years</a></li>
+    <li class="nav-item"><a class="nav-link active" href="/settings/feeheads">Fee Heads</a></li>
+    <li class="nav-item"><a class="nav-link" href="/settings/grades">Grade Config</a></li>
+</ul>
+
+<div class="row">
+    <div class="col-lg-7">
+        <div class="school-card">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <h6 class="mb-0">Fee Heads</h6>
+                <button class="btn btn-primary btn-sm" @onclick="() => { _form = new FeeHead(); _showForm = true; }">
+                    <i class="bi bi-plus-circle me-1"></i> Add Fee Head
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <table class="table-school w-100">
+                    <thead><tr><th>Name</th><th>Type</th><th>Status</th><th>Actions</th></tr></thead>
+                    <tbody>
+                        @foreach (var fh in _feeHeads)
+                        {
+                            <tr>
+                                <td><strong>@fh.Name</strong></td>
+                                <td>@(fh.IsRecurring ? "Monthly" : "One-time")</td>
+                                <td><span class="badge-status @(fh.IsActive ? "badge-active" : "badge-inactive")">@(fh.IsActive ? "Active" : "Inactive")</span></td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => EditFeeHead(fh)"><i class="bi bi-pencil"></i></button>
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(fh.Id)"><i class="bi bi-trash"></i></button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    @if (_showForm)
+    {
+        <div class="col-lg-5">
+            <div class="school-card">
+                <div class="card-header"><h6>@(_form.Id == 0 ? "Add" : "Edit") Fee Head</h6></div>
+                <div class="card-body">
+                    <EditForm Model="_form" OnValidSubmit="SaveAsync">
+                        <DataAnnotationsValidator />
+                        <div class="mb-3">
+                            <label class="form-label form-label-required">Name</label>
+                            <InputText @bind-Value="_form.Name" class="form-control" placeholder="e.g. Tuition Fee" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <InputTextArea @bind-Value="_form.Description" class="form-control" rows="2" />
+                        </div>
+                        <div class="mb-3 form-check">
+                            <InputCheckbox @bind-Value="_form.IsRecurring" class="form-check-input" id="isRecurring" />
+                            <label class="form-check-label" for="isRecurring">Monthly Recurring Fee</label>
+                        </div>
+                        <div class="mb-3 form-check">
+                            <InputCheckbox @bind-Value="_form.IsActive" class="form-check-input" id="isActive" />
+                            <label class="form-check-label" for="isActive">Active</label>
+                        </div>
+                        <button type="submit" class="btn btn-primary me-2">Save</button>
+                        <button type="button" class="btn btn-outline-secondary" @onclick="() => _showForm = false">Cancel</button>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<FeeHead> _feeHeads = new();
+    private FeeHead _form = new();
+    private bool _showForm;
+
+    protected override async Task OnInitializedAsync() => _feeHeads = await SettingsSvc.GetAllFeeHeadsAsync();
+    private void EditFeeHead(FeeHead fh) { _form = new FeeHead { Id = fh.Id, Name = fh.Name, Description = fh.Description, IsRecurring = fh.IsRecurring, IsActive = fh.IsActive }; _showForm = true; }
+    private async Task SaveAsync() { await SettingsSvc.SaveFeeHeadAsync(_form); _feeHeads = await SettingsSvc.GetAllFeeHeadsAsync(); _showForm = false; }
+    private async Task DeleteAsync(int id) { await SettingsSvc.DeleteFeeHeadAsync(id); _feeHeads = await SettingsSvc.GetAllFeeHeadsAsync(); }
+}

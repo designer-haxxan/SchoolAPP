@@ -1,0 +1,141 @@
+@page "/attendance/teachers"
+@rendermode InteractiveServer
+@using SchoolManagementSystem.Data.Models
+@using SchoolManagementSystem.Services
+@inject AttendanceService AttendanceService
+@inject TeacherService TeacherService
+@attribute [Authorize(Policy = "AdminOnly")]
+
+<PageTitle>Teacher Attendance</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1"><i class="bi bi-person-check me-2 text-primary"></i>Teacher Attendance</h4>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
+            <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="/attendance">Attendance</a></li>
+            <li class="breadcrumb-item active">Teachers</li>
+        </ol></nav>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label">Date</label>
+                <input type="date" class="form-control" value="@selectedDate.ToString("yyyy-MM-dd")"
+                       @onchange="OnDateChange" max="@DateTime.Today.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-md-4">
+                <button class="btn btn-primary" @onclick="LoadTeachers">
+                    <i class="bi bi-people me-1"></i>Load Teachers
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (items.Count > 0)
+{
+    <div class="card shadow-sm">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <span class="fw-semibold">Teachers — @selectedDate.ToString("dd MMMM yyyy")</span>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-success" @onclick="() => MarkAll(AttendanceStatus.Present)">All Present</button>
+                <button class="btn btn-sm btn-outline-danger" @onclick="() => MarkAll(AttendanceStatus.Absent)">All Absent</button>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr><th>Employee Code</th><th>Name</th><th>Present</th><th>Absent</th><th>Late</th><th>Leave</th><th>Check In</th><th>Check Out</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in items)
+                    {
+                        <tr>
+                            <td><span class="badge bg-secondary">@item.EmployeeCode</span></td>
+                            <td>@item.Name</td>
+                            <td class="text-center"><input type="radio" name="ta_@item.TeacherId" class="form-check-input" checked="@(item.Status == AttendanceStatus.Present)" @onchange="() => item.Status = AttendanceStatus.Present" /></td>
+                            <td class="text-center"><input type="radio" name="ta_@item.TeacherId" class="form-check-input" checked="@(item.Status == AttendanceStatus.Absent)" @onchange="() => item.Status = AttendanceStatus.Absent" /></td>
+                            <td class="text-center"><input type="radio" name="ta_@item.TeacherId" class="form-check-input" checked="@(item.Status == AttendanceStatus.Late)" @onchange="() => item.Status = AttendanceStatus.Late" /></td>
+                            <td class="text-center"><input type="radio" name="ta_@item.TeacherId" class="form-check-input" checked="@(item.Status == AttendanceStatus.Leave)" @onchange="() => item.Status = AttendanceStatus.Leave" /></td>
+                            <td><input type="time" class="form-control form-control-sm" value="@item.CheckIn" @onchange="e => item.CheckIn = e.Value?.ToString()" /></td>
+                            <td><input type="time" class="form-control form-control-sm" value="@item.CheckOut" @onchange="e => item.CheckOut = e.Value?.ToString()" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="card-footer bg-white text-end">
+            <button class="btn btn-success" @onclick="Save" disabled="@isSaving">
+                @if (isSaving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                <i class="bi bi-save me-1"></i>Save
+            </button>
+        </div>
+    </div>
+
+    @if (savedMsg)
+    {
+        <div class="alert alert-success mt-3"><i class="bi bi-check-circle me-2"></i>Saved successfully!</div>
+    }
+}
+
+@code {
+    DateTime selectedDate = DateTime.Today;
+    List<TeacherAttEntry> items = [];
+    bool isSaving, savedMsg;
+
+    class TeacherAttEntry
+    {
+        public int TeacherId { get; set; }
+        public string Name { get; set; } = "";
+        public string EmployeeCode { get; set; } = "";
+        public AttendanceStatus Status { get; set; } = AttendanceStatus.Present;
+        public string? CheckIn { get; set; }
+        public string? CheckOut { get; set; }
+    }
+
+    void OnDateChange(ChangeEventArgs e) { if (DateTime.TryParse(e.Value?.ToString(), out var d)) selectedDate = d; }
+
+    async Task LoadTeachers()
+    {
+        var (teachers, _) = await TeacherService.GetAllAsync(null, true, 1, 200);
+        var dateOnly = DateOnly.FromDateTime(selectedDate);
+        var existing = await AttendanceService.GetTeacherByDateAsync(dateOnly);
+        items = teachers.Select(t =>
+        {
+            var ex = existing.FirstOrDefault(a => a.TeacherId == t.Id);
+            return new TeacherAttEntry
+            {
+                TeacherId = t.Id, Name = t.FullName, EmployeeCode = t.EmployeeCode,
+                Status = ex?.Status ?? AttendanceStatus.Present,
+                CheckIn = ex?.CheckIn?.ToString("HH:mm"),
+                CheckOut = ex?.CheckOut?.ToString("HH:mm")
+            };
+        }).ToList();
+    }
+
+    void MarkAll(AttendanceStatus s) { foreach (var i in items) i.Status = s; }
+
+    async Task Save()
+    {
+        isSaving = true;
+        var records = items.Select(i =>
+        {
+            TimeSpan? checkIn = TimeSpan.TryParse(i.CheckIn, out var ci) ? ci : null;
+            TimeSpan? checkOut = TimeSpan.TryParse(i.CheckOut, out var co) ? co : null;
+            return new SchoolManagementSystem.Data.Models.TeacherAttendance
+            {
+                TeacherId = i.TeacherId,
+                Date = DateOnly.FromDateTime(selectedDate),
+                Status = i.Status,
+                CheckIn = checkIn.HasValue ? TimeOnly.FromTimeSpan(checkIn.Value) : null,
+                CheckOut = checkOut.HasValue ? TimeOnly.FromTimeSpan(checkOut.Value) : null
+            };
+        }).ToList();
+        await AttendanceService.SaveTeacherAttendanceAsync(records);
+        isSaving = false; savedMsg = true;
+    }
+}

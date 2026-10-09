@@ -1,0 +1,144 @@
+@page "/finance/salaries"
+@rendermode InteractiveServer
+@using SchoolManagementSystem.Data.Models
+@using SchoolManagementSystem.Services
+@inject FinanceService FinanceService
+@inject TeacherService TeacherService
+@inject IJSRuntime JS
+@attribute [Authorize(Policy = "AccountantOrAdmin")]
+
+<PageTitle>Salary Sheet</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1"><i class="bi bi-people me-2 text-primary"></i>Salary Sheet</h4>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
+            <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+            <li class="breadcrumb-item active">Salaries</li>
+        </ol></nav>
+    </div>
+    <button class="btn btn-outline-success" @onclick="ExportExcel"><i class="bi bi-file-earmark-excel me-1"></i>Export</button>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">Month</label>
+                <select class="form-select" @bind="selectedMonth">
+                    @for (int m = 1; m <= 12; m++)
+                    { <option value="@m">@(new DateTime(2024, m, 1).ToString("MMMM"))</option> }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Year</label>
+                <input type="number" class="form-control" @bind="selectedYear" />
+            </div>
+            <div class="col-md-3">
+                <button class="btn btn-primary w-100 mt-4" @onclick="Load">Load Salary Sheet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+}
+else if (rows.Count > 0)
+{
+    <div class="card shadow-sm">
+        <div class="card-header bg-white d-flex justify-content-between">
+            <span class="fw-semibold">@(new DateTime(selectedYear, selectedMonth, 1).ToString("MMMM yyyy")) — Salary Sheet</span>
+            <span class="text-muted small">
+                Paid: @rows.Count(r => r.Payment?.IsPaid == true) /
+                Unpaid: @rows.Count(r => r.Payment?.IsPaid != true) /
+                Total: PKR @rows.Sum(r => r.Payment?.NetSalary ?? r.Teacher.MonthlySalary).ToString("N0")
+            </span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Emp. Code</th>
+                        <th>Name</th>
+                        <th>Basic Salary</th>
+                        <th>Allowances</th>
+                        <th>Deductions</th>
+                        <th>Net Salary</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in rows)
+                    {
+                        var pay = row.Payment;
+                        <tr>
+                            <td><span class="badge bg-secondary">@row.Teacher.EmployeeCode</span></td>
+                            <td class="fw-semibold">@row.Teacher.FullName</td>
+                            <td>@(pay?.BasicSalary ?? row.Teacher.MonthlySalary).ToString("N0")</td>
+                            <td class="text-success">+@(pay?.Allowances ?? 0).ToString("N0")</td>
+                            <td class="text-danger">-@(pay?.Deductions ?? 0).ToString("N0")</td>
+                            <td class="fw-bold">PKR @(pay?.NetSalary ?? row.Teacher.MonthlySalary).ToString("N0")</td>
+                            <td>
+                                @if (pay?.IsPaid == true)
+                                { <span class="badge bg-success">Paid @pay.PaidDate?.ToString("dd MMM")</span> }
+                                else
+                                { <span class="badge bg-warning text-dark">Unpaid</span> }
+                            </td>
+                            <td>
+                                @if (pay?.IsPaid != true)
+                                {
+                                    <button class="btn btn-sm btn-success" @onclick="() => MarkPaid(row)">
+                                        <i class="bi bi-check me-1"></i>Mark Paid
+                                    </button>
+                                }
+                                else
+                                {
+                                    <span class="text-success small"><i class="bi bi-check-circle me-1"></i>Done</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    int selectedMonth = DateTime.Now.Month, selectedYear = DateTime.Now.Year;
+    List<SalaryRow> rows = [];
+    bool isLoading;
+
+    class SalaryRow { public Teacher Teacher { get; set; } = null!; public SalaryPayment? Payment { get; set; } }
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    async Task Load()
+    {
+        isLoading = true;
+        var (teachers, _) = await TeacherService.GetAllAsync(null, true, 1, 200);
+        var payments = await FinanceService.GetSalaryPaymentsAsync(selectedMonth, selectedYear);
+        rows = teachers.Select(t => new SalaryRow
+        {
+            Teacher = t,
+            Payment = payments.FirstOrDefault(p => p.TeacherId == t.Id)
+        }).ToList();
+        isLoading = false;
+    }
+
+    async Task MarkPaid(SalaryRow row)
+    {
+        await FinanceService.MarkSalaryPaidAsync(row.Teacher.Id, selectedMonth, selectedYear, row.Teacher.MonthlySalary);
+        await Load();
+    }
+
+    async Task ExportExcel()
+    {
+        var bytes = await FinanceService.ExportSalarySheetAsync(selectedMonth, selectedYear);
+        await JS.InvokeVoidAsync("downloadFile", $"salary-{selectedYear}-{selectedMonth:D2}.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
+    }
+}

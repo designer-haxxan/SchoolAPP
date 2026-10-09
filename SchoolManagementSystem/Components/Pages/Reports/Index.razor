@@ -1,0 +1,171 @@
+@page "/reports"
+@rendermode InteractiveServer
+@using SchoolManagementSystem.Data.Models
+@using SchoolManagementSystem.Services
+@inject ReportService ReportService
+@inject ClassService ClassService
+@inject IJSRuntime JS
+@attribute [Authorize(Policy = "StaffOnly")]
+
+<PageTitle>Reports</PageTitle>
+
+<div class="mb-4">
+    <h4 class="mb-1"><i class="bi bi-graph-up me-2 text-primary"></i>Reports</h4>
+    <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
+        <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+        <li class="breadcrumb-item active">Reports</li>
+    </ol></nav>
+</div>
+
+<div class="row g-4">
+    <!-- Student Report -->
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white fw-semibold"><i class="bi bi-people me-2 text-primary"></i>Student Report</div>
+            <div class="card-body">
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <select class="form-select form-select-sm" @bind="studentClassId">
+                            <option value="0">All Classes</option>
+                            @foreach (var c in classes)
+                            { <option value="@c.Id">@c.Name</option> }
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <select class="form-select form-select-sm" @bind="studentStatus">
+                            <option value="">All Status</option>
+                            @foreach (var s in Enum.GetValues<StudentStatus>())
+                            { <option value="@s">@s</option> }
+                        </select>
+                    </div>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-success btn-sm flex-grow-1" @onclick="ExportStudentsExcel" disabled="@exporting">
+                        <i class="bi bi-file-earmark-excel me-1"></i>Excel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fee Report -->
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white fw-semibold"><i class="bi bi-cash me-2 text-success"></i>Fee Collection Report</div>
+            <div class="card-body">
+                <div class="row g-2 mb-3">
+                    <div class="col-4">
+                        <select class="form-select form-select-sm" @bind="feeMonth">
+                            @for (int m = 1; m <= 12; m++)
+                            { <option value="@m">@(new DateTime(2024, m, 1).ToString("MMM"))</option> }
+                        </select>
+                    </div>
+                    <div class="col-4">
+                        <input type="number" class="form-control form-control-sm" @bind="feeYear" />
+                    </div>
+                    <div class="col-4">
+                        <select class="form-select form-select-sm" @bind="feeClassId">
+                            <option value="0">All Classes</option>
+                            @foreach (var c in classes)
+                            { <option value="@c.Id">@c.Name</option> }
+                        </select>
+                    </div>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-success btn-sm flex-grow-1" @onclick="ExportFeeExcel" disabled="@exporting">
+                        <i class="bi bi-file-earmark-excel me-1"></i>Excel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Attendance Report -->
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white fw-semibold"><i class="bi bi-calendar-check me-2 text-info"></i>Attendance Report</div>
+            <div class="card-body">
+                <div class="row g-2 mb-3">
+                    <div class="col-4">
+                        <select class="form-select form-select-sm" @bind="attMonth">
+                            @for (int m = 1; m <= 12; m++)
+                            { <option value="@m">@(new DateTime(2024, m, 1).ToString("MMM"))</option> }
+                        </select>
+                    </div>
+                    <div class="col-4">
+                        <input type="number" class="form-control form-control-sm" @bind="attYear" />
+                    </div>
+                    <div class="col-4">
+                        <select class="form-select form-select-sm" @bind="attClassId">
+                            <option value="0">All Classes</option>
+                            @foreach (var c in classes)
+                            { <option value="@c.Id">@c.Name</option> }
+                        </select>
+                    </div>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-success btn-sm flex-grow-1" @onclick="ExportAttExcel" disabled="@exporting">
+                        <i class="bi bi-file-earmark-excel me-1"></i>Excel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Result Report -->
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white fw-semibold"><i class="bi bi-award me-2 text-warning"></i>Exam Results Report</div>
+            <div class="card-body">
+                <p class="text-muted small">Go to Examinations → Results to view and print class-wise result sheets and merit lists.</p>
+                <a href="/exams" class="btn btn-outline-primary btn-sm"><i class="bi bi-journal-check me-1"></i>Go to Exams</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (exporting)
+{
+    <div class="position-fixed bottom-0 end-0 p-3">
+        <div class="toast show bg-primary text-white">
+            <div class="toast-body"><span class="spinner-border spinner-border-sm me-2"></span>Generating report...</div>
+        </div>
+    </div>
+}
+
+@code {
+    List<Class> classes = [];
+    int studentClassId, feeMonth = DateTime.Now.Month, feeYear = DateTime.Now.Year, feeClassId;
+    int attMonth = DateTime.Now.Month, attYear = DateTime.Now.Year, attClassId;
+    string studentStatus = "";
+    bool exporting;
+
+    protected override async Task OnInitializedAsync()
+    {
+        classes = await ClassService.GetAllAsync();
+    }
+
+    async Task ExportStudentsExcel()
+    {
+        exporting = true;
+        var bytes = await ReportService.ExportStudentsToExcelAsync(0, studentClassId == 0 ? null : studentClassId, null);
+        await JS.InvokeVoidAsync("downloadFile", "students.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
+        exporting = false;
+    }
+
+    async Task ExportFeeExcel()
+    {
+        exporting = true;
+        var bytes = await ReportService.ExportFeeReportToExcelAsync(feeMonth, feeYear, 0);
+        await JS.InvokeVoidAsync("downloadFile", $"fee-{feeYear}-{feeMonth:D2}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
+        exporting = false;
+    }
+
+    async Task ExportAttExcel()
+    {
+        exporting = true;
+        var bytes = await ReportService.ExportAttendanceReportToExcelAsync(0, attMonth, attYear);
+        await JS.InvokeVoidAsync("downloadFile", $"attendance-{attYear}-{attMonth:D2}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
+        exporting = false;
+    }
+}

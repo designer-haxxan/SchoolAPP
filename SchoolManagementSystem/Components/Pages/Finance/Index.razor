@@ -1,0 +1,122 @@
+@page "/finance"
+@rendermode InteractiveServer
+@using SchoolManagementSystem.Services
+@inject FinanceService FinanceService
+@inject SettingsService SettingsService
+@attribute [Authorize(Policy = "AccountantOrAdmin")]
+
+<PageTitle>Finance</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title"><i class="bi bi-wallet2 me-2"></i>Finance</h1>
+        <p class="page-subtitle">Manage expenses, salary payments and cash book</p>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+}
+else
+{
+    <!-- Summary Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-3">
+            <div class="stat-card red">
+                <div class="stat-icon red"><i class="bi bi-wallet2"></i></div>
+                <div class="stat-info">
+                    <div class="stat-value">Rs.@monthExpenses.ToString("N0")</div>
+                    <div class="stat-label">This Month's Expenses</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="stat-card orange">
+                <div class="stat-icon orange"><i class="bi bi-people-fill"></i></div>
+                <div class="stat-info">
+                    <div class="stat-value">@unpaidSalaries</div>
+                    <div class="stat-label">Unpaid Salaries</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="stat-card green">
+                <div class="stat-icon green"><i class="bi bi-check-circle-fill"></i></div>
+                <div class="stat-info">
+                    <div class="stat-value">@paidSalaries</div>
+                    <div class="stat-label">Paid Salaries</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="stat-card blue">
+                <div class="stat-icon blue"><i class="bi bi-calendar3"></i></div>
+                <div class="stat-info">
+                    <div class="stat-value">@DateTime.Now.ToString("MMM yyyy")</div>
+                    <div class="stat-label">Current Period</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Module Cards -->
+    <div class="row g-3">
+        <div class="col-md-6 col-lg-4">
+            <a href="/finance/expenses" class="module-card text-decoration-none">
+                <div class="module-icon bg-danger-subtle text-danger">
+                    <i class="bi bi-receipt-cutoff"></i>
+                </div>
+                <div class="module-info">
+                    <h6>Expenses</h6>
+                    <p>Track and manage all school operational expenses by category</p>
+                </div>
+                <i class="bi bi-chevron-right module-arrow"></i>
+            </a>
+        </div>
+        <div class="col-md-6 col-lg-4">
+            <a href="/finance/salaries" class="module-card text-decoration-none">
+                <div class="module-icon bg-primary-subtle text-primary">
+                    <i class="bi bi-people-fill"></i>
+                </div>
+                <div class="module-info">
+                    <h6>Salary Sheet</h6>
+                    <p>Monthly salary sheet for all teaching and non-teaching staff</p>
+                </div>
+                <i class="bi bi-chevron-right module-arrow"></i>
+            </a>
+        </div>
+        <div class="col-md-6 col-lg-4">
+            <a href="/finance/cashbook" class="module-card text-decoration-none">
+                <div class="module-icon bg-success-subtle text-success">
+                    <i class="bi bi-journal-text"></i>
+                </div>
+                <div class="module-info">
+                    <h6>Cash Book</h6>
+                    <p>Daily ledger of all income (fees) and expenses with running balance</p>
+                </div>
+                <i class="bi bi-chevron-right module-arrow"></i>
+            </a>
+        </div>
+    </div>
+}
+
+@code {
+    bool isLoading = true;
+    decimal monthExpenses;
+    int paidSalaries, unpaidSalaries;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var now = DateTime.Now;
+        var from = new DateTime(now.Year, now.Month, 1);
+        var to = now;
+        var expenses = await FinanceService.GetExpensesAsync(null, from, to);
+        monthExpenses = expenses.Sum(e => e.Amount);
+
+        var salaries = await FinanceService.GetSalaryPaymentsAsync(now.Month, now.Year);
+        paidSalaries = salaries.Count(s => s.IsPaid);
+        unpaidSalaries = salaries.Count(s => !s.IsPaid);
+        isLoading = false;
+    }
+}

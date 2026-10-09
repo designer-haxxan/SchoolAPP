@@ -1,0 +1,124 @@
+@page "/fees/structure"
+@rendermode InteractiveServer
+@using SchoolManagementSystem.Data.Models
+@using SchoolManagementSystem.Services
+@inject FeeService FeeService
+@inject ClassService ClassService
+@attribute [Authorize(Policy = "AccountantOrAdmin")]
+
+<PageTitle>Fee Structure</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1"><i class="bi bi-list-columns me-2 text-primary"></i>Fee Structure</h4>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
+            <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+            <li class="breadcrumb-item active">Fee Structure</li>
+        </ol></nav>
+    </div>
+    <button class="btn btn-success" @onclick="SaveAll" disabled="@isSaving">
+        @if (isSaving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+        <i class="bi bi-save me-1"></i>Save All
+    </button>
+</div>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert alert-@(isError ? "danger" : "success") alert-dismissible">
+        @message <button type="button" class="btn-close" @onclick="() => message = string.Empty"></button>
+    </div>
+}
+
+@if (isLoading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+}
+else
+{
+    <div class="card shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-bordered align-middle mb-0 small">
+                <thead class="table-dark">
+                    <tr>
+                        <th style="min-width:150px">Fee Head</th>
+                        @foreach (var cls in classes)
+                        {
+                            <th class="text-center" style="min-width:100px">@cls.Name</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var fh in feeHeads)
+                    {
+                        <tr>
+                            <td class="fw-semibold">
+                                @fh.Name
+                                @if (fh.IsRecurring) { <span class="badge bg-info-subtle text-info ms-1">Monthly</span> }
+                            </td>
+                            @foreach (var cls in classes)
+                            {
+                                var key = (cls.Id, fh.Id);
+                                <td class="text-center p-1">
+                                    <input type="number" class="form-control form-control-sm text-center"
+                                           style="width:90px;margin:0 auto"
+                                           value="@(grid.ContainsKey(key) ? grid[key] : 0)"
+                                           min="0" step="50"
+                                           @onchange="e => UpdateGrid(key, e.Value?.ToString())" />
+                                </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <p class="text-muted small mt-2">Enter 0 to remove a fee. All amounts in PKR.</p>
+}
+
+@code {
+    List<Class> classes = [];
+    List<FeeHead> feeHeads = [];
+    Dictionary<(int classId, int feeHeadId), decimal> grid = [];
+    bool isLoading = true, isSaving;
+    string message = "";
+    bool isError;
+    int currentYearId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+        classes = await ClassService.GetAllAsync();
+        feeHeads = await FeeService.GetFeeHeadsAsync();
+        var structures = await FeeService.GetAllStructuresAsync();
+        currentYearId = structures.FirstOrDefault()?.AcademicYearId ?? await FeeService.GetCurrentYearIdAsync();
+        foreach (var s in structures)
+            grid[(s.ClassId, s.FeeHeadId)] = s.Amount;
+        isLoading = false;
+    }
+
+    void UpdateGrid((int, int) key, string? val)
+    {
+        if (decimal.TryParse(val, out var d)) grid[key] = d;
+    }
+
+    async Task SaveAll()
+    {
+        isSaving = true; message = ""; isError = false;
+        try
+        {
+            var structures = new List<FeeStructure>();
+            foreach (var cls in classes)
+                foreach (var fh in feeHeads)
+                {
+                    var key = (cls.Id, fh.Id);
+                    var amount = grid.ContainsKey(key) ? grid[key] : 0;
+                    if (amount > 0)
+                        structures.Add(new FeeStructure { ClassId = cls.Id, FeeHeadId = fh.Id, AcademicYearId = currentYearId, Amount = amount, DueDay = 10 });
+                }
+            await FeeService.SaveStructureAsync(structures, currentYearId);
+            message = "Fee structure saved successfully.";
+        }
+        catch (Exception ex) { message = ex.Message; isError = true; }
+        finally { isSaving = false; }
+    }
+}

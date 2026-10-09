@@ -1,0 +1,140 @@
+@inherits LayoutComponentBase
+@inject NavigationManager NavigationManager
+@using Microsoft.AspNetCore.Components.Authorization
+
+<div class="app-shell">
+
+  <!-- Mobile sidebar overlay -->
+  <div class="sb-overlay" id="sidebarOverlay" onclick="window.closeSidebar()"></div>
+
+  <!-- ═══ SIDEBAR ══════════════════════════════════════════════ -->
+  <aside class="sidebar" id="sidebar">
+
+    <!-- Brand -->
+    <a class="sb-brand" href="/">
+      <div class="sb-logo-mark">
+        <i class="bi bi-mortarboard-fill"></i>
+      </div>
+      <div>
+        <div class="sb-brand-name">EduSmart SMS</div>
+        <span class="sb-brand-sub">Management System</span>
+      </div>
+    </a>
+
+    <!-- Nav Menu -->
+    <NavMenu />
+
+    <!-- User footer -->
+    <AuthorizeView>
+      <Authorized>
+        <div class="sb-footer">
+          <div class="sb-user">
+            <div class="sb-avatar">
+              @(context.User.Identity?.Name?.Length > 0
+                  ? context.User.Identity.Name[0].ToString().ToUpper()
+                  : "U")
+            </div>
+            <div style="flex:1;min-width:0;">
+              <span class="sb-user-name">@context.User.Identity?.Name</span>
+              <span class="sb-user-role">
+                @if (context.User.IsInRole("Admin")) { <text>Administrator</text> }
+                else if (context.User.IsInRole("Teacher")) { <text>Teacher</text> }
+                else if (context.User.IsInRole("Accountant")) { <text>Accountant</text> }
+                else { <text>Staff</text> }
+              </span>
+            </div>
+            <form action="Account/Logout" method="post" style="display:contents;">
+              <AntiforgeryToken />
+              <input type="hidden" name="ReturnUrl"
+                     value="@NavigationManager.ToBaseRelativePath(NavigationManager.Uri)" />
+              <button type="submit" class="sb-logout" title="Sign out">
+                <i class="bi bi-box-arrow-right"></i>
+              </button>
+            </form>
+          </div>
+        </div>
+      </Authorized>
+    </AuthorizeView>
+
+  </aside>
+
+  <!-- ═══ MAIN ═════════════════════════════════════════════════ -->
+  <div class="main-wrap">
+
+    <!-- Topbar -->
+    <header class="topbar">
+      <!-- Mobile hamburger -->
+      <button class="tb-toggle" onclick="window.toggleSidebar()" aria-label="Toggle menu">
+        <i class="bi bi-list" style="font-size:1.15rem;"></i>
+      </button>
+
+      <!-- Centered search -->
+      <div class="tb-search d-none d-md-block">
+        <div class="input-group">
+          <span class="input-group-text"><i class="bi bi-search"></i></span>
+          <input type="text" class="form-control"
+                 placeholder="Search students, teachers, fees…" />
+        </div>
+      </div>
+
+      <!-- Right controls -->
+      <div class="tb-actions">
+
+        <button class="tb-btn d-md-none" title="Search">
+          <i class="bi bi-search"></i>
+        </button>
+
+        <a href="#" class="tb-btn" title="Notifications" @onclick:preventDefault>
+          <i class="bi bi-bell"></i>
+          <span class="tb-badge"></span>
+        </a>
+
+        <a href="/settings" class="tb-btn d-none d-sm-flex" title="Settings">
+          <i class="bi bi-gear"></i>
+        </a>
+
+        <AuthorizeView>
+          <Authorized>
+            <div class="tb-user">
+              <div class="tb-avatar">
+                @(context.User.Identity?.Name?.Length > 0
+                    ? context.User.Identity.Name[0].ToString().ToUpper()
+                    : "U")
+              </div>
+              <span class="tb-user-name d-none d-sm-inline">
+                @context.User.Identity?.Name
+              </span>
+              <i class="bi bi-chevron-down d-none d-sm-inline"
+                 style="font-size:.6rem;color:var(--text-3);"></i>
+            </div>
+          </Authorized>
+          <NotAuthorized>
+            <a href="Account/Login" class="btn btn-primary btn-sm">
+              <i class="bi bi-box-arrow-in-right"></i> Login
+            </a>
+          </NotAuthorized>
+        </AuthorizeView>
+
+      </div>
+    </header>
+
+    <!-- Page body -->
+    <div class="page-body">
+      @Body
+    </div>
+
+  </div>
+</div>
+
+<div id="blazor-error-ui"
+     style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9999;
+            background:#fef2f2;border-top:2px solid #fecaca;padding:10px 20px;
+            font-size:.84rem;color:#991b1b;align-items:center;gap:10px;">
+  <i class="bi bi-exclamation-triangle-fill"></i>
+  An error occurred. &nbsp;
+  <a href="" class="fw-semibold" style="color:var(--primary);">Reload</a>
+  <button onclick="document.getElementById('blazor-error-ui').style.display='none'"
+          style="margin-left:auto;background:none;border:none;cursor:pointer;color:var(--text-2);">
+    <i class="bi bi-x-lg"></i>
+  </button>
+</div>

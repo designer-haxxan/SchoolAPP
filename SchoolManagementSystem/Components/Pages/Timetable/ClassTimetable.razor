@@ -1,0 +1,191 @@
+@page "/timetable"
+@page "/timetable/class"
+@rendermode InteractiveServer
+@using SchoolManagementSystem.Data.Models
+@using SchoolManagementSystem.Services
+@inject TimetableService TimetableService
+@inject ClassService ClassService
+@inject SubjectService SubjectService
+@inject TeacherService TeacherService
+@attribute [Authorize(Policy = "StaffOnly")]
+
+<PageTitle>Class Timetable</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1"><i class="bi bi-calendar3 me-2 text-primary"></i>Class Timetable</h4>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
+            <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+            <li class="breadcrumb-item active">Timetable</li>
+        </ol></nav>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/timetable/teacher" class="btn btn-outline-secondary"><i class="bi bi-person me-1"></i>Teacher View</a>
+        <a href="/timetable/periods" class="btn btn-outline-primary"><i class="bi bi-clock me-1"></i>Manage Periods</a>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label">Class</label>
+                <select class="form-select" @onchange="OnClassChange">
+                    <option value="0">Select Class...</option>
+                    @foreach (var c in classes)
+                    { <option value="@c.Id">@c.Name</option> }
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Section</label>
+                <select class="form-select" @bind="selectedSectionId" @bind:after="LoadTimetable" disabled="@(sections.Count == 0)">
+                    <option value="0">Select Section...</option>
+                    @foreach (var s in sections)
+                    { <option value="@s.Id">@s.Name</option> }
+                </select>
+            </div>
+            <div class="col-md-4">
+                <div class="form-check form-switch mt-4">
+                    <input type="checkbox" class="form-check-input" id="editMode" @bind="editMode" />
+                    <label class="form-check-label" for="editMode">Edit Mode</label>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+}
+else if (selectedSectionId > 0 && periods.Count > 0)
+{
+    <div class="card shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-bordered align-middle mb-0 small">
+                <thead class="table-dark">
+                    <tr>
+                        <th style="width:100px">Period</th>
+                        <th style="width:80px">Time</th>
+                        @foreach (var day in days)
+                        { <th class="text-center">@day</th> }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var period in periods)
+                    {
+                        <tr @class="@(period.IsBreak ? "table-light" : "")">
+                            <td class="fw-semibold">@period.Name</td>
+                            <td class="text-muted small">@period.StartTime.ToString("HH:mm")-@period.EndTime.ToString("HH:mm")</td>
+                            @if (period.IsBreak)
+                            {
+                                <td colspan="@days.Count" class="text-center text-muted fst-italic">Break</td>
+                            }
+                            else
+                            {
+                                @foreach (var day in dayNums)
+                                {
+                                    var entry = GetEntry(period.Id, day);
+                                    <td class="p-1 text-center">
+                                        @if (editMode)
+                                        {
+                                            <div class="d-flex gap-1">
+                                                <select class="form-select form-select-sm" style="font-size:11px"
+                                                        value="@(entry?.SubjectId ?? 0)"
+                                                        @onchange="e => UpdateEntry(period.Id, day, int.TryParse(e.Value?.ToString(), out var sv) ? sv : 0, entry?.TeacherId ?? 0)">
+                                                    <option value="0">—</option>
+                                                    @foreach (var s in subjects)
+                                                    { <option value="@s.Id">@s.Name</option> }
+                                                </select>
+                                            </div>
+                                        }
+                                        else if (entry != null)
+                                        {
+                                            <div class="small">
+                                                <div class="fw-semibold text-primary">@entry.Subject?.Name</div>
+                                                <div class="text-muted">@entry.Teacher?.FirstName</div>
+                                            </div>
+                                        }
+                                    </td>
+                                }
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (editMode)
+        {
+            <div class="card-footer bg-white text-end">
+                <button class="btn btn-success" @onclick="SaveTimetable" disabled="@isSaving">
+                    @if (isSaving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                    <i class="bi bi-save me-1"></i>Save Timetable
+                </button>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    List<Class> classes = [];
+    List<Section> sections = [];
+    List<Period> periods = [];
+    List<Subject> subjects = [];
+    List<TimetableEntry> entries = [];
+    int selectedClassId, selectedSectionId;
+    bool isLoading, editMode, isSaving;
+    List<string> days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    List<int> dayNums = [1, 2, 3, 4, 5, 6]; // DayOfWeek as int
+
+    protected override async Task OnInitializedAsync()
+    {
+        classes = await ClassService.GetAllAsync();
+        periods = await TimetableService.GetPeriodsAsync();
+    }
+
+    async Task OnClassChange(ChangeEventArgs e)
+    {
+        selectedClassId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0;
+        selectedSectionId = 0; entries.Clear();
+        if (selectedClassId > 0)
+        {
+            var cls = await ClassService.GetByIdAsync(selectedClassId);
+            sections = cls?.Sections?.ToList() ?? [];
+            subjects = await SubjectService.GetSubjectsByClassAsync(selectedClassId);
+        }
+        else { sections = []; subjects = []; }
+    }
+
+    async Task LoadTimetable()
+    {
+        if (selectedSectionId == 0) return;
+        isLoading = true;
+        entries = await TimetableService.GetBySectionAsync(selectedSectionId);
+        isLoading = false;
+    }
+
+    TimetableEntry? GetEntry(int periodId, int dayOfWeek) =>
+        entries.FirstOrDefault(e => e.PeriodId == periodId && (int)e.DayOfWeek == dayOfWeek);
+
+    void UpdateEntry(int periodId, int dayOfWeek, int subjectId, int teacherId)
+    {
+        var entry = entries.FirstOrDefault(e => e.PeriodId == periodId && (int)e.DayOfWeek == dayOfWeek);
+        if (subjectId == 0)
+        {
+            if (entry != null) entries.Remove(entry);
+            return;
+        }
+        if (entry == null)
+        {
+            entries.Add(new TimetableEntry { SectionId = selectedSectionId, PeriodId = periodId, DayOfWeek = (DayOfWeek)dayOfWeek, SubjectId = subjectId, TeacherId = teacherId });
+        }
+        else { entry.SubjectId = subjectId; entry.TeacherId = teacherId; }
+    }
+
+    async Task SaveTimetable()
+    {
+        isSaving = true;
+        await TimetableService.SaveEntriesAsync(entries, selectedSectionId);
+        isSaving = false; editMode = false;
+    }
+}
