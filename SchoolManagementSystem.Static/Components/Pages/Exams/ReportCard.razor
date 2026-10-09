@@ -1,0 +1,148 @@
+@page "/exams/{ExamId:int}/report-card/{StudentId:int}"
+@page "/report-card/{StudentId:int}"
+@using SchoolManagementSystem.Data.Models
+@using SchoolManagementSystem.Services
+@inject ExamService ExamService
+@inject StudentService StudentService
+@inject SettingsService SettingsService
+@inject IJSRuntime JS
+@attribute [Authorize]
+
+<PageTitle>Report Card</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3 no-print">
+    <h4><i class="bi bi-file-text me-2 text-primary"></i>Report Card</h4>
+    <button class="btn btn-primary" @onclick="Print"><i class="bi bi-printer me-1"></i>Print</button>
+</div>
+
+@if (student == null)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+}
+else
+{
+    <div class="report-card" id="reportCard" style="max-width:800px;margin:0 auto;border:2px solid #333;padding:20px;font-family:'Times New Roman',serif">
+        <div class="text-center mb-3">
+            <h4 class="mb-0 fw-bold">@(settings?.SchoolName ?? "School Management System")</h4>
+            <p class="mb-0 small">@settings?.Address</p>
+            <p class="mb-0 small">Tel: @settings?.Phone</p>
+            <hr />
+            <h5 class="fw-bold">PROGRESS REPORT / REPORT CARD</h5>
+            @if (exam != null) { <p class="mb-0">@exam.Name — @exam.AcademicYear?.Name</p> }
+        </div>
+
+        <div class="row mb-3">
+            <div class="col-6">
+                <table class="table table-sm table-bordered mb-0 small">
+                    <tr><th>Student Name</th><td>@student.FullName</td></tr>
+                    <tr><th>Father's Name</th><td>@student.FatherName</td></tr>
+                    <tr><th>Roll No.</th><td>@student.RollNumber</td></tr>
+                </table>
+            </div>
+            <div class="col-6">
+                <table class="table table-sm table-bordered mb-0 small">
+                    <tr><th>Class</th><td>@student.Section?.Class?.Name</td></tr>
+                    <tr><th>Section</th><td>@student.Section?.Name</td></tr>
+                    <tr><th>Reg. No.</th><td>@student.RegistrationNumber</td></tr>
+                </table>
+            </div>
+        </div>
+
+        <table class="table table-sm table-bordered small">
+            <thead class="table-dark">
+                <tr>
+                    <th>Subject</th>
+                    <th class="text-center">Total Marks</th>
+                    <th class="text-center">Obtained</th>
+                    <th class="text-center">%</th>
+                    <th class="text-center">Grade</th>
+                    <th class="text-center">Remarks</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in results)
+                {
+                    var pct = r.TotalMarks > 0 ? r.ObtainedMarks / r.TotalMarks * 100 : 0;
+                    <tr>
+                        <td>@r.Subject?.Name</td>
+                        <td class="text-center">@r.TotalMarks</td>
+                        <td class="text-center @(r.IsAbsent ? "text-danger" : "")">
+                            @(r.IsAbsent ? "AB" : r.ObtainedMarks.ToString())
+                        </td>
+                        <td class="text-center">@(r.IsAbsent ? "—" : pct.ToString("F0") + "%")</td>
+                        <td class="text-center"><strong>@r.Grade</strong></td>
+                        <td class="text-center">@GetRemarks(r.Grade)</td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot class="table-light fw-bold">
+                <tr>
+                    <td>Total</td>
+                    <td class="text-center">@results.Sum(r => r.TotalMarks)</td>
+                    <td class="text-center">@results.Where(r => !r.IsAbsent).Sum(r => r.ObtainedMarks)</td>
+                    <td class="text-center">@overallPct.ToString("F1")%</td>
+                    <td class="text-center">@overallGrade</td>
+                    <td class="text-center @(passed ? "text-success" : "text-danger")">@(passed ? "PASS" : "FAIL")</td>
+                </tr>
+            </tfoot>
+        </table>
+
+        <div class="row mt-4">
+            <div class="col-4 text-center">
+                <div style="border-top:1px solid #333;margin-top:40px;padding-top:5px;font-size:12px">Class Teacher</div>
+            </div>
+            <div class="col-4 text-center">
+                <div style="border-top:1px solid #333;margin-top:40px;padding-top:5px;font-size:12px">Incharge</div>
+            </div>
+            <div class="col-4 text-center">
+                <div style="border-top:1px solid #333;margin-top:40px;padding-top:5px;font-size:12px">Principal</div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int ExamId { get; set; }
+    [Parameter] public int StudentId { get; set; }
+    Student? student;
+    Exam? exam;
+    List<ExamResult> results = [];
+    SchoolSettings? settings;
+    decimal overallPct;
+    string overallGrade = "";
+    bool passed;
+
+    protected override async Task OnInitializedAsync()
+    {
+        student = await StudentService.GetByIdAsync(StudentId);
+        settings = await SettingsService.GetSchoolSettingsAsync();
+        if (ExamId > 0)
+        {
+            exam = await ExamService.GetByIdAsync(ExamId);
+            results = await ExamService.GetResultsByStudentAndExamAsync(StudentId, ExamId);
+        }
+        else
+        {
+            results = await ExamService.GetLatestStudentResultsAsync(StudentId);
+        }
+        var totalM = results.Sum(r => r.TotalMarks);
+        var obtM = results.Where(r => !r.IsAbsent).Sum(r => r.ObtainedMarks);
+        overallPct = totalM > 0 ? obtM / totalM * 100 : 0;
+        overallGrade = CalcGrade(overallPct);
+        passed = overallPct >= 40;
+    }
+
+    string CalcGrade(decimal pct) => pct switch
+    {
+        >= 90 => "A+", >= 80 => "A", >= 70 => "B+", >= 60 => "B",
+        >= 50 => "C", >= 40 => "D", _ => "F"
+    };
+
+    string GetRemarks(string g) => g switch
+    {
+        "A+" => "Outstanding", "A" => "Excellent", "B+" => "Very Good",
+        "B" => "Good", "C" => "Satisfactory", "D" => "Pass", _ => "Fail"
+    };
+
+    async Task Print() => await JS.InvokeVoidAsync("printElement", "reportCard");
+}

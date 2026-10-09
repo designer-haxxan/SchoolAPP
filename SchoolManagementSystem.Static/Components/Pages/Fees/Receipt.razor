@@ -1,0 +1,93 @@
+@page "/fees/receipt/{PaymentId:int}"
+@layout SchoolManagementSystem.Components.Layout.PrintLayout
+@using SchoolManagementSystem.Data.Models
+@using SchoolManagementSystem.Services
+@inject FeeService FeeService
+@inject SettingsService SettingsService
+@attribute [Authorize(Policy = "AccountantOrAdmin")]
+
+<PageTitle>Receipt @(payment?.ReceiptNumber ?? "")</PageTitle>
+
+@if (payment is null)
+{
+    <div class="alert alert-warning m-4">Receipt not found.</div>
+}
+else
+{
+    var v = payment.FeeVoucher;
+    var student = v.Student!;
+    var monthLabel = new DateTime(v.Year, v.Month, 1).ToString("MMMM yyyy");
+    var balance = v.PendingAmount;
+
+    <section class="receipt-sheet">
+        <header class="receipt-head">
+            <div>
+                <div class="challan-school">@(school?.SchoolName ?? "School")</div>
+                <div class="challan-sub">@school?.Address @(string.IsNullOrWhiteSpace(school?.City) ? "" : "· " + school!.City)</div>
+                <div class="challan-sub">@(string.IsNullOrWhiteSpace(school?.Phone) ? "" : "Tel: " + school!.Phone)</div>
+            </div>
+            <div class="text-end">
+                <div class="challan-title">PAYMENT RECEIPT</div>
+                <div class="challan-sub">No. <strong>@payment.ReceiptNumber</strong></div>
+                <div class="challan-sub">Date: @payment.PaidOn.ToString("dd MMM yyyy")</div>
+            </div>
+        </header>
+
+        <div class="challan-student">
+            <div><span>Received from</span><strong>@student.FullName</strong></div>
+            <div><span>Reg. No.</span><strong>@student.RegistrationNumber</strong></div>
+            <div><span>Class / Section</span><strong>@student.Section?.Class?.Name @student.Section?.Name</strong></div>
+            <div><span>Fee month</span><strong>@monthLabel</strong></div>
+        </div>
+
+        <div class="receipt-amount">
+            <div>
+                <span>Amount received</span>
+                <div class="receipt-amount-value">@MoneyFormat.Pkr(payment.Amount)</div>
+            </div>
+            <div class="receipt-words">@MoneyFormat.ToWords(payment.Amount)</div>
+        </div>
+
+        <table class="challan-table">
+            <tbody>
+                <tr><td>Payment method</td><td class="text-end">@payment.Method</td></tr>
+                <tr><td>Voucher</td><td class="text-end">@v.VoucherNumber</td></tr>
+                <tr><td>Voucher total</td><td class="text-end">@v.TotalAmount.ToString("N0")</td></tr>
+                @if (v.LateFee > 0)
+                {
+                    <tr><td>Late fee</td><td class="text-end">@v.LateFee.ToString("N0")</td></tr>
+                }
+                @if (v.Discount > 0)
+                {
+                    <tr><td>Discount</td><td class="text-end">− @v.Discount.ToString("N0")</td></tr>
+                }
+                <tr><td>Paid to date</td><td class="text-end">@v.PaidAmount.ToString("N0")</td></tr>
+                <tr class="subtotal"><td>Balance remaining</td><td class="text-end">@(balance > 0 ? balance.ToString("N0") : "Nil — fully paid")</td></tr>
+            </tbody>
+        </table>
+
+        @if (!string.IsNullOrWhiteSpace(payment.Remarks))
+        {
+            <div class="challan-sub mt-2"><strong>Remarks:</strong> @payment.Remarks</div>
+        }
+
+        <footer class="receipt-foot">
+            <div class="challan-sub">Collected by: @payment.CollectedBy</div>
+            <div class="challan-sign">Authorized signature</div>
+        </footer>
+        <div class="challan-sub text-center mt-3">This is a computer-generated receipt.</div>
+    </section>
+}
+
+@code {
+    [Parameter] public int PaymentId { get; set; }
+
+    FeePayment? payment;
+    SchoolSettings? school;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        school = await SettingsService.GetSchoolSettingsAsync();
+        payment = await FeeService.GetPaymentByIdAsync(PaymentId);
+    }
+}

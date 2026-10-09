@@ -1,0 +1,73 @@
+@page "/settings/grades"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Policy = "AdminOnly")]
+@inject SettingsService SettingsSvc
+
+<PageTitle>Grade Configuration - Settings</PageTitle>
+
+<div class="page-header">
+    <h1 class="page-title"><i class="bi bi-award-fill me-2"></i>Grade Configuration</h1>
+</div>
+
+<ul class="nav nav-tabs mb-4">
+    <li class="nav-item"><a class="nav-link" href="settings/profile">School Profile</a></li>
+    <li class="nav-item"><a class="nav-link" href="settings/years">Academic Years</a></li>
+    <li class="nav-item"><a class="nav-link" href="settings/feeheads">Fee Heads</a></li>
+    <li class="nav-item"><a class="nav-link active" href="settings/grades">Grade Config</a></li>
+</ul>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="school-card">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <h6 class="mb-0">Grade Thresholds — @_currentYear?.Name</h6>
+                <button class="btn btn-primary btn-sm" @onclick="SaveAsync">
+                    <i class="bi bi-check-circle me-1"></i> Save All
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <table class="table-school w-100">
+                    <thead><tr><th>Grade</th><th>Min %</th><th>Max %</th><th>Remarks</th></tr></thead>
+                    <tbody>
+                        @foreach (var g in _configs)
+                        {
+                            <tr>
+                                <td><InputText @bind-Value="g.GradeLetter" class="form-control form-control-sm" style="width:60px;" /></td>
+                                <td><InputNumber @bind-Value="g.MinPercentage" class="form-control form-control-sm" style="width:80px;" /></td>
+                                <td><InputNumber @bind-Value="g.MaxPercentage" class="form-control form-control-sm" style="width:80px;" /></td>
+                                <td><InputText @bind-Value="g.Remarks" class="form-control form-control-sm" /></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @if (!string.IsNullOrEmpty(_message))
+            {
+                <div class="card-body pt-0">
+                    <div class="alert alert-success mb-0">@_message</div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<GradeConfig> _configs = new();
+    private AcademicYear? _currentYear;
+    private string? _message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _currentYear = await SettingsSvc.GetCurrentYearAsync();
+        if (_currentYear != null)
+            _configs = await SettingsSvc.GetGradeConfigsAsync(_currentYear.Id);
+    }
+
+    private async Task SaveAsync()
+    {
+        await SettingsSvc.SaveGradeConfigsAsync(_configs);
+        _message = "Grade configuration saved!";
+        await Task.Delay(3000);
+        _message = null;
+    }
+}

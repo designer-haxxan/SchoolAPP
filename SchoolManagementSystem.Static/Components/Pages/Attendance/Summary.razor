@@ -1,0 +1,133 @@
+@page "/attendance/summary"
+@using SchoolManagementSystem.Data.Models
+@using SchoolManagementSystem.Services
+@inject AttendanceService AttendanceService
+@inject ClassService ClassService
+@inject IJSRuntime JS
+@attribute [Authorize(Policy = "StaffOnly")]
+
+<PageTitle>Attendance Summary</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1"><i class="bi bi-bar-chart me-2 text-primary"></i>Attendance Summary</h4>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
+            <li class="breadcrumb-item"><a href="">Dashboard</a></li>
+            <li class="breadcrumb-item active">Attendance Summary</li>
+        </ol></nav>
+    </div>
+    <button class="btn btn-outline-success" @onclick="ExportExcel"><i class="bi bi-file-earmark-excel me-1"></i>Export</button>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">Month</label>
+                <select class="form-select" @bind="selectedMonth">
+                    @for (int m = 1; m <= 12; m++)
+                    {
+                        <option value="@m">@(new DateTime(2024, m, 1).ToString("MMMM"))</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Year</label>
+                <select class="form-select" @bind="selectedYear">
+                    @for (int y = DateTime.Now.Year - 1; y <= DateTime.Now.Year + 1; y++)
+                    {
+                        <option value="@y">@y</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Class</label>
+                <select class="form-select" @bind="selectedClassId">
+                    <option value="0">All Classes</option>
+                    @foreach (var c in classes)
+                    {
+                        <option value="@c.Id">@c.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button class="btn btn-primary w-100" @onclick="LoadSummary">
+                    <i class="bi bi-search me-1"></i>Load Summary
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+}
+else if (summary.Count > 0)
+{
+    <div class="card shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Class</th>
+                        <th>Section</th>
+                        <th>Total Students</th>
+                        <th>Working Days</th>
+                        <th>Avg Present</th>
+                        <th>Avg Absent</th>
+                        <th>Attendance %</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in summary)
+                    {
+                        <tr>
+                            <td>@row.ClassName</td>
+                            <td>@row.SectionName</td>
+                            <td>@row.TotalStudents</td>
+                            <td>@row.WorkingDays</td>
+                            <td>@row.AvgPresent</td>
+                            <td>@row.AvgAbsent</td>
+                            <td>
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="progress flex-grow-1" style="height:6px">
+                                        <div class="progress-bar @(row.Percentage >= 75 ? "bg-success" : row.Percentage >= 50 ? "bg-warning" : "bg-danger")"
+                                             style="width:@row.Percentage%"></div>
+                                    </div>
+                                    <span class="small fw-semibold @(row.Percentage >= 75 ? "text-success" : "text-danger")">@row.Percentage%</span>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    int selectedMonth = DateTime.Now.Month, selectedYear = DateTime.Now.Year, selectedClassId;
+    List<Class> classes = [];
+    List<AttendanceService.AttendanceSummaryRow> summary = [];
+    bool isLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        classes = await ClassService.GetAllAsync();
+    }
+
+    async Task LoadSummary()
+    {
+        isLoading = true;
+        summary = await AttendanceService.GetSectionSummaryAsync(selectedMonth, selectedYear, selectedClassId == 0 ? null : selectedClassId);
+        isLoading = false;
+    }
+
+    async Task ExportExcel()
+    {
+        var bytes = await AttendanceService.ExportSummaryToExcelAsync(selectedMonth, selectedYear);
+        await JS.InvokeVoidAsync("downloadFile", $"attendance-{selectedYear}-{selectedMonth:D2}.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
+    }
+}

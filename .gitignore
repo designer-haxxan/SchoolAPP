@@ -19,3 +19,7 @@ secrets.json
 # Misc
 *.log
 TestResults/
+
+# Local publish output (GitHub Actions builds its own)
+publish/
+**/publish/

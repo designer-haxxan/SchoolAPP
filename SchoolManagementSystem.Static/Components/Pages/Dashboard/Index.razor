@@ -1,0 +1,436 @@
+@page "/"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject DashboardService DashboardSvc
+@inject FeeService FeeSvc
+@inject AttendanceService AttendanceSvc
+@inject AnnouncementService AnnouncementSvc
+@inject SettingsService SettingsSvc
+@inject ActivityLogService LogSvc
+@inject IJSRuntime JS
+
+<PageTitle>Dashboard — EduSmart SMS</PageTitle>
+
+@if (_loading)
+{
+    <div class="page-header">
+        <div style="width:240px;">
+            <div class="skeleton skeleton-text mb-2" style="width:60%;"></div>
+            <div class="skeleton skeleton-text" style="width:40%;"></div>
+        </div>
+    </div>
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-xl-3"><div class="skeleton" style="height:96px;border-radius:16px;"></div></div>
+        <div class="col-6 col-xl-3"><div class="skeleton" style="height:96px;border-radius:16px;"></div></div>
+        <div class="col-6 col-xl-3"><div class="skeleton" style="height:96px;border-radius:16px;"></div></div>
+        <div class="col-6 col-xl-3"><div class="skeleton" style="height:96px;border-radius:16px;"></div></div>
+    </div>
+    <div class="d-flex justify-content-center py-4">
+        <div class="spinner-border text-primary" role="status"></div>
+    </div>
+}
+else
+{
+    <!-- Page Header -->
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">
+                <i class="bi bi-grid-1x2-fill"></i>
+                Dashboard
+            </h1>
+            <p class="page-subtitle">Welcome back — here's what's happening today</p>
+        </div>
+        <div>
+            <span class="badge badge-soft-primary" style="font-size:.8rem;padding:6px 12px;">
+                <i class="bi bi-calendar3 me-1"></i>@DateTime.Today.ToString("dddd, dd MMM yyyy")
+            </span>
+        </div>
+    </div>
+
+    <!-- Welcome Banner -->
+    <div class="welcome-banner mb-4">
+        <div class="welcome-pill">
+            <i class="bi bi-stars"></i> Academic Year @(DateTime.Now.Year)–@(DateTime.Now.Year + 1)
+        </div>
+        <h4>Good @GetGreeting(), Administrator! 👋</h4>
+        <p>
+            @_stats.TotalStudents students enrolled &middot;
+            @_stats.PresentToday present today &middot;
+            @_stats.AttendancePercentage% attendance rate
+        </p>
+    </div>
+
+    <!-- Stat Cards Row 1 -->
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-xl-3">
+            <div class="stat-card blue">
+                <div class="stat-icon blue"><i class="bi bi-people-fill"></i></div>
+                <div class="stat-info">
+                    <div class="stat-value">@_stats.TotalStudents</div>
+                    <div class="stat-label">Total Students</div>
+                    <span class="stat-trend up"><i class="bi bi-arrow-up-short"></i> Enrolled</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="stat-card green">
+                <div class="stat-icon green"><i class="bi bi-calendar-check-fill"></i></div>
+                <div class="stat-info">
+                    <div class="stat-value">@_stats.PresentToday</div>
+                    <div class="stat-label">Present Today</div>
+                    <span class="stat-trend up"><i class="bi bi-arrow-up-short"></i> @_stats.AttendancePercentage%</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="stat-card orange">
+                <div class="stat-icon orange"><i class="bi bi-person-workspace"></i></div>
+                <div class="stat-info">
+                    <div class="stat-value">@_stats.TotalTeachers</div>
+                    <div class="stat-label">Total Teachers</div>
+                    <span class="stat-trend flat"><i class="bi bi-dash"></i> Active Staff</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="stat-card teal">
+                <div class="stat-icon teal"><i class="bi bi-cash-coin"></i></div>
+                <div class="stat-info">
+                    <div class="stat-value" style="font-size:1.1rem;">Rs.@_stats.MonthlyCollection.ToString("N0")</div>
+                    <div class="stat-label">Monthly Collection</div>
+                    <span class="stat-trend up"><i class="bi bi-arrow-up-short"></i> This month</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stat Cards Row 2 -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-xl-3">
+            <div class="stat-card purple">
+                <div class="stat-icon purple"><i class="bi bi-building"></i></div>
+                <div class="stat-info">
+                    <div class="stat-value">@_stats.TotalClasses</div>
+                    <div class="stat-label">Classes &amp; Sections</div>
+                    <span class="stat-trend flat"><i class="bi bi-dash"></i> Active</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="stat-card red">
+                <div class="stat-icon red"><i class="bi bi-exclamation-circle-fill"></i></div>
+                <div class="stat-info">
+                    <div class="stat-value">@_stats.PendingFees</div>
+                    <div class="stat-label">Pending Vouchers</div>
+                    <span class="stat-trend down"><i class="bi bi-arrow-down-short"></i> Fee dues</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="stat-card navy">
+                <div class="stat-icon navy"><i class="bi bi-percent"></i></div>
+                <div class="stat-info">
+                    <div class="stat-value">@_stats.AttendancePercentage%</div>
+                    <div class="stat-label">Attendance Rate</div>
+                    <span class="stat-trend up"><i class="bi bi-circle-fill" style="font-size:.45rem;"></i> Today</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <a href="students/create" class="stat-card pink text-decoration-none" style="cursor:pointer;">
+                <div class="stat-icon pink"><i class="bi bi-person-plus-fill"></i></div>
+                <div class="stat-info">
+                    <div class="stat-value" style="font-size:.95rem;font-weight:700;">New Student</div>
+                    <div class="stat-label">Quick Enroll</div>
+                    <span class="stat-trend flat"><i class="bi bi-arrow-right-short"></i> Open form</span>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row g-3 mb-3">
+        <div class="col-lg-7">
+            <div class="card h-100">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <h6><i class="bi bi-bar-chart-fill"></i> Fee Collection — Last 6 Months</h6>
+                    <span class="badge badge-soft-primary">Rs.</span>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="feeChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h6><i class="bi bi-pie-chart-fill" style="color:var(--success);"></i> Today's Attendance</h6>
+                </div>
+                <div class="card-body d-flex flex-column align-items-center">
+                    <div class="chart-container w-100" style="height:190px;">
+                        <canvas id="attendanceChart"></canvas>
+                    </div>
+                    <div class="d-flex gap-3 mt-2 flex-wrap justify-content-center" style="font-size:.79rem;">
+                        <span><span class="badge badge-active">P</span> Present: <strong>@_presentCount</strong></span>
+                        <span><span class="badge badge-absent">A</span> Absent: <strong>@_absentCount</strong></span>
+                        <span><span class="badge badge-late">L</span> Late: <strong>@_lateCount</strong></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Row -->
+    <div class="row g-3">
+
+        <!-- Quick Actions -->
+        <div class="col-lg-3">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h6><i class="bi bi-lightning-fill" style="color:var(--warning);"></i> Quick Actions</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <a href="students/create" class="quick-action-btn">
+                                <i class="bi bi-person-plus-fill" style="color:var(--primary);"></i>
+                                <span>New Student</span>
+                            </a>
+                        </div>
+                        <div class="col-6">
+                            <a href="attendance" class="quick-action-btn">
+                                <i class="bi bi-calendar-check" style="color:var(--success);"></i>
+                                <span>Attendance</span>
+                            </a>
+                        </div>
+                        <div class="col-6">
+                            <a href="fees/vouchers" class="quick-action-btn">
+                                <i class="bi bi-receipt" style="color:var(--warning);"></i>
+                                <span>Fee Voucher</span>
+                            </a>
+                        </div>
+                        <div class="col-6">
+                            <a href="fees/collect" class="quick-action-btn">
+                                <i class="bi bi-cash" style="color:var(--accent);"></i>
+                                <span>Collect Fee</span>
+                            </a>
+                        </div>
+                        <div class="col-6">
+                            <a href="exams" class="quick-action-btn">
+                                <i class="bi bi-pencil-square" style="color:var(--danger);"></i>
+                                <span>Exams</span>
+                            </a>
+                        </div>
+                        <div class="col-6">
+                            <a href="reports" class="quick-action-btn">
+                                <i class="bi bi-bar-chart-fill" style="color:#7c3aed;"></i>
+                                <span>Reports</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Activity Feed -->
+        <div class="col-lg-5">
+            <div class="card h-100">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <h6><i class="bi bi-activity" style="color:var(--info);"></i> Recent Activity</h6>
+                    <span class="badge badge-soft-secondary">@_activities.Count entries</span>
+                </div>
+                <div class="card-body" style="max-height:300px;overflow-y:auto;padding:10px 16px!important;">
+                    @if (_activities.Count == 0)
+                    {
+                        <div class="empty-state" style="padding:28px 12px;">
+                            <i class="bi bi-inbox"></i>
+                            <h6>No recent activity</h6>
+                            <p>Actions will appear here</p>
+                        </div>
+                    }
+                    else
+                    {
+                        @foreach (var log in _activities)
+                        {
+                            <div class="activity-item">
+                                <div class="activity-icon @GetActivityColor(log.Action)">
+                                    <i class="bi @GetActivityIcon(log.Action)"></i>
+                                </div>
+                                <div class="activity-content">
+                                    <div>@(log.Description ?? (log.Action + " " + log.EntityType))</div>
+                                    <span class="activity-time">
+                                        @log.UserName &middot; @log.CreatedAt.ToLocalTime().ToString("dd MMM, hh:mm tt")
+                                    </span>
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Upcoming Events -->
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <h6><i class="bi bi-calendar-event-fill"></i> Upcoming Events</h6>
+                    <a href="communication/events" class="btn btn-sm btn-outline-primary">View All</a>
+                </div>
+                <div class="card-body" style="padding:10px 16px!important;">
+                    @if (_upcomingEvents.Count == 0)
+                    {
+                        <div class="empty-state" style="padding:28px 12px;">
+                            <i class="bi bi-calendar-x"></i>
+                            <h6>No upcoming events</h6>
+                            <p>Add events in Communication</p>
+                        </div>
+                    }
+                    else
+                    {
+                        @foreach (var ev in _upcomingEvents)
+                        {
+                            <div class="d-flex align-items-start gap-3 py-2"
+                                 style="border-bottom:1px solid var(--surface-3);">
+                                <div class="flex-shrink-0 text-center"
+                                     style="width:40px;background:var(--primary-light);
+                                            border-radius:var(--r-sm);padding:5px 2px;">
+                                    <div style="font-size:1.05rem;font-weight:800;color:var(--primary);line-height:1;">
+                                        @ev.StartDateTime.Day
+                                    </div>
+                                    <div style="font-size:.62rem;color:var(--primary);font-weight:600;text-transform:uppercase;">
+                                        @ev.StartDateTime.ToString("MMM")
+                                    </div>
+                                </div>
+                                <div style="flex:1;min-width:0;">
+                                    <div class="fw-semibold text-truncate" style="font-size:.83rem;">@ev.Title</div>
+                                    @if (ev.IsHoliday)
+                                    {
+                                        <span class="badge badge-soft-danger mt-1">Holiday</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge badge-soft-primary mt-1">@ev.Type</span>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Announcements -->
+    @if (_announcements.Count > 0)
+    {
+        <div class="row g-3 mt-1">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h6><i class="bi bi-megaphone-fill" style="color:var(--warning);"></i> Latest Announcements</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-2">
+                            @foreach (var ann in _announcements.Take(3))
+                            {
+                                <div class="col-md-4">
+                                    <div style="border:1px solid var(--border);border-left:3px solid var(--primary);
+                                                border-radius:var(--r);padding:14px;background:var(--surface-2);">
+                                        <div class="d-flex align-items-start justify-content-between gap-2 mb-1">
+                                            <strong style="font-size:.84rem;">@ann.Title</strong>
+                                            <span class="badge badge-soft-primary">@ann.Type</span>
+                                        </div>
+                                        <p style="font-size:.79rem;color:var(--text-2);margin:0;line-height:1.5;">@ann.Content</p>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private DashboardStats _stats = new();
+    private List<ActivityLog> _activities = new();
+    private List<SchoolEvent> _upcomingEvents = new();
+    private List<Announcement> _announcements = new();
+    private bool _loading = true;
+    private int _presentCount, _absentCount, _lateCount;
+    private int _currentYearId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var year = await SettingsSvc.GetCurrentYearAsync();
+        _currentYearId = year?.Id ?? 1;
+        _stats          = await DashboardSvc.GetStatsAsync(_currentYearId);
+        _activities     = await LogSvc.GetRecentAsync(10);
+        _upcomingEvents = await AnnouncementSvc.GetUpcomingEventsAsync(5);
+        _announcements  = await AnnouncementSvc.GetActiveAsync();
+
+        var todaySummary = await AttendanceSvc.GetTodaySummaryAsync();
+        _presentCount = todaySummary.GetValueOrDefault(AttendanceStatus.Present, 0);
+        _absentCount  = todaySummary.GetValueOrDefault(AttendanceStatus.Absent,  0);
+        _lateCount    = todaySummary.GetValueOrDefault(AttendanceStatus.Late,    0);
+
+        _loading = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_loading)
+            await RenderChartsAsync();
+    }
+
+    private async Task RenderChartsAsync()
+    {
+        try
+        {
+            var feeSummary = await FeeSvc.GetMonthlyCollectionSummaryAsync(6);
+            var labels = feeSummary.Select(f => f.Month).ToArray();
+            var data   = feeSummary.Select(f => (object)(double)f.Amount).ToArray();
+            await JS.InvokeVoidAsync("initChart", "feeChart", "bar", labels, data,
+                "Fee Collection (Rs.)", "rgba(79,70,229,0.85)");
+
+            if (_presentCount + _absentCount + _lateCount > 0)
+            {
+                var attLabels = new[] { "Present", "Absent", "Late", "Leave" };
+                var attData   = new object[] { _presentCount, _absentCount, _lateCount, 0 };
+                var colors    = new[] { "#10b981", "#ef4444", "#f59e0b", "#8b5cf6" };
+                await JS.InvokeVoidAsync("initDoughnutChart", "attendanceChart", attLabels, attData, colors);
+            }
+        }
+        catch { }
+    }
+
+    private string GetGreeting()
+    {
+        var h = DateTime.Now.Hour;
+        if (h < 12) return "morning";
+        if (h < 17) return "afternoon";
+        return "evening";
+    }
+
+    private string GetActivityColor(string action) => action switch
+    {
+        "Created" => "badge-active",
+        "Updated" => "badge-soft-info",
+        "Deleted" => "badge-soft-danger",
+        "Login"   => "badge-soft-purple",
+        _         => "badge-soft-secondary"
+    };
+
+    private string GetActivityIcon(string action) => action switch
+    {
+        "Created" => "bi-plus-circle-fill",
+        "Updated" => "bi-pencil-fill",
+        "Deleted" => "bi-trash-fill",
+        "Login"   => "bi-box-arrow-in-right",
+        _         => "bi-info-circle-fill"
+    };
+}

@@ -1,0 +1,15 @@
+@inherits LayoutComponentBase
+
+@* Bare layout for printable documents (challans, receipts): no sidebar or topbar. *@
+<div class="print-page">
+    <div class="print-toolbar no-print">
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="history.back()">
+            <i class="bi bi-arrow-left me-1"></i>Back
+        </button>
+        <button type="button" class="btn btn-sm btn-primary" onclick="window.print()">
+            <i class="bi bi-printer me-1"></i>Print
+        </button>
+    </div>
+
+    @Body
+</div>

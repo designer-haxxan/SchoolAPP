@@ -1,0 +1,35 @@
+@page "/login"
+@inject DemoAuthStateProvider Auth
+@inject NavigationManager Navigation
+
+<PageTitle>Sign in — EduSmart SMS</PageTitle>
+
+<div class="d-flex justify-content-center align-items-center py-5">
+    <div class="card shadow-sm reveal" style="max-width:420px;width:100%;">
+        <div class="card-body p-4 text-center">
+            <div class="sb-logo-mark mx-auto mb-3"><i class="bi bi-mortarboard-fill"></i></div>
+            <h4 class="mb-1">Welcome to EduSmart SMS</h4>
+            <p class="text-muted small mb-4">Live demo. Pick a role to explore. Data resets when you reload the page.</p>
+
+            <div class="d-grid gap-2">
+                <button class="btn btn-primary" @onclick='() => SignIn("Admin")'>
+                    <i class="bi bi-shield-lock me-2"></i>Continue as Admin
+                </button>
+                <button class="btn btn-outline-primary" @onclick='() => SignIn("Accountant")'>
+                    <i class="bi bi-cash-coin me-2"></i>Continue as Accountant
+                </button>
+                <button class="btn btn-outline-secondary" @onclick='() => SignIn("Teacher")'>
+                    <i class="bi bi-person-workspace me-2"></i>Continue as Teacher
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private async Task SignIn(string role)
+    {
+        await Auth.SignInAsync(role);
+        Navigation.NavigateTo("");
+    }
+}

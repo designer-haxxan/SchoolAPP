@@ -1,0 +1,103 @@
+@page "/finance/cashbook"
+@using SchoolManagementSystem.Data.Models
+@using SchoolManagementSystem.Services
+@inject FinanceService FinanceService
+@attribute [Authorize(Policy = "AccountantOrAdmin")]
+
+<PageTitle>Cash Book</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1"><i class="bi bi-journal-text me-2 text-primary"></i>Cash Book</h4>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
+            <li class="breadcrumb-item"><a href="">Dashboard</a></li>
+            <li class="breadcrumb-item active">Cash Book</li>
+        </ol></nav>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">From</label>
+                <input type="date" class="form-control" @bind="fromDate" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">To</label>
+                <input type="date" class="form-control" @bind="toDate" />
+            </div>
+            <div class="col-md-3">
+                <button class="btn btn-primary w-100 mt-4" @onclick="Load">Generate Cash Book</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+}
+else if (loaded)
+{
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body"><h6>Total Income</h6><h4>PKR @totalIncome.ToString("N0")</h4></div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white">
+                <div class="card-body"><h6>Total Expenses</h6><h4>PKR @totalExpenses.ToString("N0")</h4></div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card @(balance >= 0 ? "bg-primary" : "bg-warning") text-white">
+                <div class="card-body"><h6>Balance</h6><h4>PKR @balance.ToString("N0")</h4></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 small">
+                <thead class="table-light">
+                    <tr><th>Date</th><th>Description</th><th>Type</th><th class="text-end text-success">Income</th><th class="text-end text-danger">Expense</th><th class="text-end">Balance</th></tr>
+                </thead>
+                <tbody>
+                    @{ decimal runningBalance = 0; }
+                    @foreach (var entry in cashBookEntries)
+                    {
+                        runningBalance += entry.IsIncome ? entry.Amount : -entry.Amount;
+                        <tr>
+                            <td>@entry.Date.ToString("dd MMM yyyy")</td>
+                            <td>@entry.Description</td>
+                            <td><span class="badge @(entry.IsIncome ? "bg-success" : "bg-danger")">@(entry.IsIncome ? "Income" : "Expense")</span></td>
+                            <td class="text-end text-success">@(entry.IsIncome ? entry.Amount.ToString("N0") : "—")</td>
+                            <td class="text-end text-danger">@(!entry.IsIncome ? entry.Amount.ToString("N0") : "—")</td>
+                            <td class="text-end fw-semibold @(runningBalance >= 0 ? "text-success" : "text-danger")">@runningBalance.ToString("N0")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    DateTime fromDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
+    DateTime toDate = DateTime.Today;
+    List<FinanceService.CashBookEntry> cashBookEntries = [];
+    decimal totalIncome, totalExpenses, balance;
+    bool isLoading, loaded;
+
+    async Task Load()
+    {
+        isLoading = true; loaded = false;
+        cashBookEntries = await FinanceService.GetCashBookAsync(fromDate, toDate);
+        totalIncome = cashBookEntries.Where(e => e.IsIncome).Sum(e => e.Amount);
+        totalExpenses = cashBookEntries.Where(e => !e.IsIncome).Sum(e => e.Amount);
+        balance = totalIncome - totalExpenses;
+        isLoading = false; loaded = true;
+    }
+}

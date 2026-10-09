@@ -1,0 +1,174 @@
+@page "/exams/{ExamId:int}/marks"
+@using SchoolManagementSystem.Data.Models
+@using SchoolManagementSystem.Services
+@inject ExamService ExamService
+@inject StudentService StudentService
+@attribute [Authorize(Policy = "TeacherOrAdmin")]
+
+<PageTitle>Marks Entry</PageTitle>
+
+@if (exam == null)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="mb-1"><i class="bi bi-pencil-square me-2 text-primary"></i>Marks Entry — @exam.Name</h4>
+            <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
+                <li class="breadcrumb-item"><a href="exams">Exams</a></li>
+                <li class="breadcrumb-item active">Marks Entry</li>
+            </ol></nav>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label">Schedule (Class/Subject)</label>
+                    <select class="form-select" @onchange="OnScheduleChange">
+                        <option value="0">Select...</option>
+                        @foreach (var s in exam.Schedules ?? [])
+                        {
+                            <option value="@s.Id">@s.Class?.Name — @s.Subject?.Name (@s.TotalMarks marks)</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-primary" @onclick="LoadStudents" disabled="@(selectedScheduleId == 0)">Load</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (marksItems.Count > 0 && selectedSchedule != null)
+    {
+        <div class="card shadow-sm">
+            <div class="card-header bg-white fw-semibold">
+                @selectedSchedule.Class?.Name — @selectedSchedule.Subject?.Name
+                <span class="text-muted ms-2 small">Total: @selectedSchedule.TotalMarks | Pass: @selectedSchedule.PassMarks</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr><th>Roll No</th><th>Student Name</th><th>Marks Obtained</th><th>Absent</th><th>Grade</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in marksItems)
+                        {
+                            <tr>
+                                <td><span class="badge bg-secondary">@item.RollNumber</span></td>
+                                <td>@item.StudentName</td>
+                                <td style="width:160px">
+                                    <input type="number" class="form-control form-control-sm"
+                                           disabled="@item.IsAbsent"
+                                           value="@item.ObtainedMarks"
+                                           min="0" max="@selectedSchedule.TotalMarks"
+                                           @onchange="e => { if (decimal.TryParse(e.Value?.ToString(), out var m)) { item.ObtainedMarks = m; item.Grade = CalcGrade(m, selectedSchedule.TotalMarks); } }" />
+                                </td>
+                                <td class="text-center">
+                                    <input type="checkbox" class="form-check-input" @bind="item.IsAbsent" @bind:after="() => { if (item.IsAbsent) { item.ObtainedMarks = 0; item.Grade = string.Empty; } }" />
+                                </td>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(item.Grade))
+                                    {
+                                        <span class="badge @GetGradeBadge(item.Grade)">@item.Grade</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-footer bg-white text-end">
+                <button class="btn btn-success" @onclick="SaveMarks" disabled="@isSaving">
+                    @if (isSaving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                    <i class="bi bi-save me-1"></i>Save Marks
+                </button>
+            </div>
+        </div>
+        @if (savedMsg) { <div class="alert alert-success mt-3"><i class="bi bi-check-circle me-2"></i>Marks saved!</div> }
+    }
+}
+
+@code {
+    [Parameter] public int ExamId { get; set; }
+    Exam? exam;
+    int selectedScheduleId;
+    ExamSchedule? selectedSchedule;
+    List<MarksEntryItem> marksItems = [];
+    bool isSaving, savedMsg;
+    List<GradeConfig> gradeConfigs = [];
+
+    class MarksEntryItem
+    {
+        public int StudentId { get; set; }
+        public string StudentName { get; set; } = "";
+        public int RollNumber { get; set; }
+        public decimal ObtainedMarks { get; set; }
+        public bool IsAbsent { get; set; }
+        public string Grade { get; set; } = "";
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        exam = await ExamService.GetByIdAsync(ExamId);
+        gradeConfigs = await ExamService.GetGradeConfigsAsync();
+    }
+
+    void OnScheduleChange(ChangeEventArgs e)
+    {
+        selectedScheduleId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0;
+        marksItems.Clear();
+    }
+
+    async Task LoadStudents()
+    {
+        selectedSchedule = exam?.Schedules?.FirstOrDefault(s => s.Id == selectedScheduleId);
+        if (selectedSchedule == null) return;
+        var students = await StudentService.GetByClassAsync(selectedSchedule.ClassId);
+        var existing = await ExamService.GetResultsByScheduleAsync(selectedScheduleId);
+        marksItems = students.Select(s =>
+        {
+            var ex = existing.FirstOrDefault(r => r.StudentId == s.Id);
+            return new MarksEntryItem
+            {
+                StudentId = s.Id, StudentName = s.FullName, RollNumber = s.RollNumber,
+                ObtainedMarks = ex?.ObtainedMarks ?? 0,
+                IsAbsent = ex?.IsAbsent ?? false,
+                Grade = ex?.Grade ?? ""
+            };
+        }).OrderBy(x => x.RollNumber).ToList();
+    }
+
+    string CalcGrade(decimal obtained, decimal total)
+    {
+        if (total == 0) return "";
+        var pct = obtained / total * 100;
+        return gradeConfigs.FirstOrDefault(g => pct >= g.MinPercentage && pct <= g.MaxPercentage)?.GradeLetter ?? "F";
+    }
+
+    string GetGradeBadge(string g) => g switch
+    {
+        "A+" => "bg-success", "A" => "bg-success",
+        "B+" or "B" => "bg-primary",
+        "C" => "bg-info", "D" => "bg-warning text-dark",
+        _ => "bg-danger"
+    };
+
+    async Task SaveMarks()
+    {
+        isSaving = true;
+        var results = marksItems.Select(m => new ExamResult
+        {
+            ExamId = ExamId, StudentId = m.StudentId,
+            SubjectId = selectedSchedule!.SubjectId,
+            ObtainedMarks = m.ObtainedMarks, TotalMarks = selectedSchedule.TotalMarks,
+            Grade = m.Grade, IsAbsent = m.IsAbsent
+        }).ToList();
+        await ExamService.SaveResultsAsync(results, selectedScheduleId);
+        isSaving = false; savedMsg = true;
+    }
+}

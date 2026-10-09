@@ -1,0 +1,181 @@
+@page "/teachers"
+@using SchoolManagementSystem.Data.Models
+@using SchoolManagementSystem.Services
+@inject TeacherService TeacherService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@attribute [Authorize(Policy = "StaffOnly")]
+
+<PageTitle>Teachers</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1"><i class="bi bi-person-badge me-2 text-primary"></i>Teachers</h4>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
+            <li class="breadcrumb-item"><a href="">Dashboard</a></li>
+            <li class="breadcrumb-item active">Teachers</li>
+        </ol></nav>
+    </div>
+    <a href="teachers/create" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Add Teacher</a>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-5">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" placeholder="Search by name or CNIC..." value="@searchTerm" @oninput="OnSearch" />
+                </div>
+            </div>
+            <div class="col-md-3">
+                <select class="form-select" @bind="statusFilter" @bind:after="LoadTeachers">
+                    <option value="">All Status</option>
+                    <option value="true">Active</option>
+                    <option value="false">Inactive</option>
+                </select>
+            </div>
+            <div class="col-md-4 text-end">
+                <button class="btn btn-outline-success" @onclick="ExportExcel"><i class="bi bi-file-earmark-excel me-1"></i>Export Excel</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+}
+else if (teachers.Count == 0)
+{
+    <div class="text-center py-5 text-muted"><i class="bi bi-person-badge display-4"></i><p class="mt-2">No teachers found.</p></div>
+}
+else
+{
+    <div class="card shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Employee Code</th>
+                        <th>Name</th>
+                        <th>CNIC</th>
+                        <th>Phone</th>
+                        <th>Qualification</th>
+                        <th>Joining Date</th>
+                        <th>Salary</th>
+                        <th>Status</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var t in teachers)
+                    {
+                        <tr>
+                            <td><span class="badge bg-secondary">@t.EmployeeCode</span></td>
+                            <td>
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="avatar-sm bg-primary rounded-circle d-flex align-items-center justify-content-center text-white">
+                                        @t.FirstName[0]
+                                    </div>
+                                    <div>
+                                        <div class="fw-semibold">@t.FullName</div>
+                                        <small class="text-muted">@t.Email</small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>@t.CNIC</td>
+                            <td>@t.Phone</td>
+                            <td>@t.Qualification</td>
+                            <td>@t.JoiningDate.ToString("dd MMM yyyy")</td>
+                            <td>PKR @t.MonthlySalary.ToString("N0")</td>
+                            <td>
+                                @if (t.IsActive)
+                                {
+                                    <span class="badge bg-success-subtle text-success">Active</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger-subtle text-danger">Inactive</span>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <a href="teachers/@t.Id" class="btn btn-sm btn-outline-info me-1" title="View"><i class="bi bi-eye"></i></a>
+                                <a href="teachers/@t.Id/edit" class="btn btn-sm btn-outline-primary me-1" title="Edit"><i class="bi bi-pencil"></i></a>
+                                <button class="btn btn-sm btn-outline-danger" title="Delete" @onclick="() => ConfirmDelete(t)"><i class="bi bi-trash"></i></button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="card-footer d-flex justify-content-between align-items-center">
+            <small class="text-muted">Showing @teachers.Count of @totalCount teachers</small>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-secondary" disabled="@(currentPage == 1)" @onclick="PrevPage"><i class="bi bi-chevron-left"></i></button>
+                <span class="btn btn-sm btn-outline-secondary disabled">Page @currentPage of @totalPages</span>
+                <button class="btn btn-sm btn-outline-secondary" disabled="@(currentPage >= totalPages)" @onclick="NextPage"><i class="bi bi-chevron-right"></i></button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (deleteTarget != null)
+{
+    <div class="modal fade show d-block" style="background:rgba(0,0,0,0.5)">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title">Confirm Delete</h5></div>
+                <div class="modal-body">Delete teacher <strong>@deleteTarget.FullName</strong>? This cannot be undone.</div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="() => deleteTarget = null">Cancel</button>
+                    <button class="btn btn-danger" @onclick="DeleteTeacher">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    List<Teacher> teachers = [];
+    int totalCount, currentPage = 1, totalPages = 1;
+    const int PageSize = 15;
+    string searchTerm = "", statusFilter = "";
+    bool isLoading = true;
+    Teacher? deleteTarget;
+    System.Threading.CancellationTokenSource? searchCts;
+
+    protected override async Task OnInitializedAsync() => await LoadTeachers();
+
+    async Task LoadTeachers()
+    {
+        isLoading = true;
+        bool? active = statusFilter == "true" ? true : statusFilter == "false" ? false : null;
+        var (items, total) = await TeacherService.GetAllAsync(searchTerm, active, currentPage, PageSize);
+        teachers = items; totalCount = total;
+        totalPages = (int)Math.Ceiling(total / (double)PageSize);
+        isLoading = false;
+    }
+
+    async Task OnSearch(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? "";
+        searchCts?.Cancel(); searchCts = new();
+        try { await Task.Delay(300, searchCts.Token); currentPage = 1; await LoadTeachers(); } catch { }
+    }
+
+    async Task PrevPage() { if (currentPage > 1) { currentPage--; await LoadTeachers(); } }
+    async Task NextPage() { if (currentPage < totalPages) { currentPage++; await LoadTeachers(); } }
+
+    void ConfirmDelete(Teacher t) => deleteTarget = t;
+    async Task DeleteTeacher()
+    {
+        if (deleteTarget != null) { await TeacherService.DeleteAsync(deleteTarget.Id); deleteTarget = null; await LoadTeachers(); }
+    }
+
+    async Task ExportExcel()
+    {
+        var bytes = await TeacherService.ExportToExcelAsync();
+        await JS.InvokeVoidAsync("downloadFile", "teachers.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
+    }
+}

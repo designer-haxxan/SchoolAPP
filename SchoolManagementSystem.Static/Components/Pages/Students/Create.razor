@@ -1,0 +1,253 @@
+@page "/students/create"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Policy = "StaffOnly")]
+@inject StudentService StudentSvc
+@inject ClassService ClassSvc
+@inject SettingsService SettingsSvc
+@inject NavigationManager Nav
+@inject ActivityLogService LogSvc
+@inject AuthenticationStateProvider Auth
+
+<PageTitle>Add Student</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title"><i class="bi bi-person-plus-fill me-2"></i>Add New Student</h1>
+    </div>
+    <a href="students" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i> Back</a>
+</div>
+
+<!-- Step Indicator -->
+<div class="d-flex gap-2 mb-4">
+    @foreach (var (label, idx) in new[] { "Personal Info", "Guardian Info", "Class Assignment" }.Select((l, i) => (l, i + 1)))
+    {
+        <div class="d-flex align-items-center gap-2">
+            <div class="rounded-circle d-flex align-items-center justify-content-center fw-bold"
+                 style="width:30px;height:30px;background:@(_step >= idx ? "#1a237e" : "#e0e0e0");color:@(_step >= idx ? "#fff" : "#999")">@idx</div>
+            <span style="font-size:0.85rem;color:@(_step == idx ? "#1a237e" : "#999");font-weight:@(_step == idx ? "600" : "400")">@label</span>
+            @if (idx < 3) { <i class="bi bi-chevron-right text-muted"></i> }
+        </div>
+    }
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="school-card">
+            <div class="card-body">
+
+                @if (_step == 1)
+                {
+                    <!-- Step 1: Personal Info -->
+                    <div class="form-section-title">Personal Information</div>
+                    <div class="row g-3">
+                        <div class="col-md-5">
+                            <label class="form-label form-label-required">First Name</label>
+                            <input class="form-control" @bind="_student.FirstName" placeholder="Enter first name" />
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label form-label-required">Last Name</label>
+                            <input class="form-control" @bind="_student.LastName" placeholder="Enter last name" />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Gender</label>
+                            <select class="form-select" @bind="_student.Gender">
+                                @foreach (var g in Enum.GetValues<Gender>()) { <option value="@g">@g</option> }
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label form-label-required">Father Name</label>
+                            <input class="form-control" @bind="_student.FatherName" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Date of Birth</label>
+                            <input type="date" class="form-control" @bind="_student.DateOfBirth" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">B-Form Number</label>
+                            <input class="form-control" @bind="_student.BFormNumber" placeholder="XXXXX-XXXXXXX-X" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Religion</label>
+                            <input class="form-control" @bind="_student.Religion" placeholder="Islam" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Nationality</label>
+                            <input class="form-control" @bind="_student.Nationality" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Admission Date</label>
+                            <input type="date" class="form-control" @bind="_student.AdmissionDate" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Address</label>
+                            <textarea class="form-control" rows="2" @bind="_student.CurrentAddress"></textarea>
+                        </div>
+                    </div>
+                }
+
+                @if (_step == 2)
+                {
+                    <!-- Step 2: Guardian Info -->
+                    <div class="form-section-title">Father / Guardian Information</div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label form-label-required">Father Name</label>
+                            <input class="form-control" @bind="_guardian.FatherName" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Father CNIC</label>
+                            <input class="form-control" @bind="_guardian.FatherCNIC" placeholder="XXXXX-XXXXXXX-X" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Father Phone</label>
+                            <input class="form-control" @bind="_guardian.FatherPhone" placeholder="03XX-XXXXXXX" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Father Occupation</label>
+                            <input class="form-control" @bind="_guardian.FatherOccupation" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Mother Name</label>
+                            <input class="form-control" @bind="_guardian.MotherName" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Mother Phone</label>
+                            <input class="form-control" @bind="_guardian.MotherPhone" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Emergency Contact</label>
+                            <input class="form-control" @bind="_guardian.EmergencyContact" placeholder="03XX-XXXXXXX" />
+                        </div>
+                    </div>
+                }
+
+                @if (_step == 3)
+                {
+                    <!-- Step 3: Class Assignment -->
+                    <div class="form-section-title">Class Assignment</div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label form-label-required">Registration No.</label>
+                            <input class="form-control" value="@_student.RegistrationNumber" readonly />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Admission Date</label>
+                            <input type="date" class="form-control" @bind="_student.AdmissionDate" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Status</label>
+                            <select class="form-select" @bind="_student.Status">
+                                @foreach (var st in Enum.GetValues<StudentStatus>()) { <option value="@st">@st</option> }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Class</label>
+                            <select class="form-select" @onchange="OnClassChange">
+                                <option value="">-- Select Class --</option>
+                                @foreach (var c in _classes) { <option value="@c.Id">@c.Name</option> }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Section</label>
+                            <select class="form-select" @bind="_student.SectionId">
+                                <option value="">-- Select Section --</option>
+                                @foreach (var s in _sections) { <option value="@s.Id">Section @s.Name</option> }
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Roll Number</label>
+                            <input type="number" class="form-control" @bind="_student.RollNumber" />
+                        </div>
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(_error))
+                {
+                    <div class="alert alert-danger mt-3">@_error</div>
+                }
+
+                <!-- Step Navigation -->
+                <div class="d-flex justify-content-between mt-4">
+                    @if (_step > 1)
+                    {
+                        <button class="btn btn-outline-secondary" @onclick="() => _step--">
+                            <i class="bi bi-chevron-left me-1"></i> Previous
+                        </button>
+                    }
+                    else { <span></span> }
+
+                    @if (_step < 3)
+                    {
+                        <button class="btn btn-primary" @onclick="NextStep">
+                            Next <i class="bi bi-chevron-right ms-1"></i>
+                        </button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-success" @onclick="SaveAsync" disabled="@_saving">
+                            @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                            <i class="bi bi-check-circle me-1"></i> Save Student
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private Student _student = new() { AdmissionDate = DateTime.Today, Status = StudentStatus.Active, Nationality = "Pakistani" };
+    private Guardian _guardian = new();
+    private List<Class> _classes = new();
+    private List<Section> _sections = new();
+    private int _step = 1;
+    private int _currentYearId;
+    private string? _error;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var year = await SettingsSvc.GetCurrentYearAsync();
+        _currentYearId = year?.Id ?? 1;
+        _student.AcademicYearId = _currentYearId;
+        _classes = await ClassSvc.GetAllAsync(_currentYearId);
+        _student.RegistrationNumber = await StudentSvc.GenerateRegistrationNumberAsync(_currentYearId);
+    }
+
+    private async Task OnClassChange(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int classId))
+        {
+            _sections = await ClassSvc.GetSectionsAsync(classId);
+            _student.SectionId = null;
+        }
+    }
+
+    private async Task NextStep()
+    {
+        if (_step == 1 && (string.IsNullOrWhiteSpace(_student.FirstName) || string.IsNullOrWhiteSpace(_student.LastName)))
+        { _error = "First name and last name are required."; return; }
+        if (_step == 2 && string.IsNullOrWhiteSpace(_guardian.FatherName))
+        { _error = "Father name is required."; return; }
+        _error = null;
+        _step++;
+        if (_step == 3 && _student.SectionId.HasValue)
+            _student.RollNumber = await StudentSvc.GetNextRollNumberAsync(_student.SectionId.Value);
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        try
+        {
+            var student = await StudentSvc.CreateAsync(_student);
+            _guardian.StudentId = student.Id;
+            _guardian.FatherName ??= _student.FatherName ?? "";
+            await StudentSvc.SaveGuardianAsync(_guardian);
+            var authState = await Auth.GetAuthenticationStateAsync();
+            await LogSvc.LogAsync(authState.User.Identity?.Name ?? "System", "Created", "Student", student.Id.ToString(), $"Added student {student.FullName}");
+            Nav.NavigateTo($"/students/{student.Id}");
+        }
+        catch (Exception ex) { _error = $"Error: {ex.Message}"; _saving = false; }
+    }
+}

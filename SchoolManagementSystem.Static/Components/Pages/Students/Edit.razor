@@ -1,0 +1,167 @@
+@page "/students/{Id:int}/edit"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Policy = "StaffOnly")]
+@inject StudentService StudentSvc
+@inject ClassService ClassSvc
+@inject SettingsService SettingsSvc
+@inject NavigationManager Nav
+
+<PageTitle>Edit Student</PageTitle>
+
+<div class="page-header">
+    <h1 class="page-title"><i class="bi bi-pencil-fill me-2"></i>Edit Student</h1>
+    <a href="students/@Id" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i> Back</a>
+</div>
+
+@if (_student == null)
+{
+    <div class="text-center py-4"><div class="spinner-border text-primary"></div></div>
+}
+else
+{
+    <div class="row">
+        <div class="col-lg-9">
+            <div class="school-card">
+                <div class="card-body">
+                    <div class="form-section-title">Personal Information</div>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label class="form-label form-label-required">First Name</label>
+                            <input class="form-control" @bind="_student.FirstName" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label form-label-required">Last Name</label>
+                            <input class="form-control" @bind="_student.LastName" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Father Name</label>
+                            <input class="form-control" @bind="_student.FatherName" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Gender</label>
+                            <select class="form-select" @bind="_student.Gender">
+                                @foreach (var g in Enum.GetValues<Gender>()) { <option value="@g">@g</option> }
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Date of Birth</label>
+                            <input type="date" class="form-control" @bind="_student.DateOfBirth" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">B-Form No.</label>
+                            <input class="form-control" @bind="_student.BFormNumber" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Status</label>
+                            <select class="form-select" @bind="_student.Status">
+                                @foreach (var st in Enum.GetValues<StudentStatus>()) { <option value="@st">@st</option> }
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Address</label>
+                            <textarea class="form-control" rows="2" @bind="_student.CurrentAddress"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="form-section-title">Class Assignment</div>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label class="form-label">Class</label>
+                            <select class="form-select" @onchange="OnClassChange">
+                                <option value="">-- Select Class --</option>
+                                @foreach (var c in _classes)
+                                {
+                                    <option value="@c.Id" selected="@(c.Sections.Any(s => s.Id == _student.SectionId))">@c.Name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Section</label>
+                            <select class="form-select" @bind="_student.SectionId">
+                                <option value="">-- Select Section --</option>
+                                @foreach (var s in _sections) { <option value="@s.Id">Section @s.Name</option> }
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Roll Number</label>
+                            <input type="number" class="form-control" @bind="_student.RollNumber" />
+                        </div>
+                    </div>
+
+                    @if (_guardian != null)
+                    {
+                        <div class="form-section-title">Guardian Information</div>
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-4">
+                                <label class="form-label">Father CNIC</label>
+                                <input class="form-control" @bind="_guardian.FatherCNIC" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Father Phone</label>
+                                <input class="form-control" @bind="_guardian.FatherPhone" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Emergency Contact</label>
+                                <input class="form-control" @bind="_guardian.EmergencyContact" />
+                            </div>
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrEmpty(_error))
+                    {
+                        <div class="alert alert-danger">@_error</div>
+                    }
+
+                    <button class="btn btn-primary" @onclick="SaveAsync" disabled="@_saving">
+                        @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                        <i class="bi bi-check-circle me-1"></i> Save Changes
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+    private Student? _student;
+    private Guardian? _guardian;
+    private List<Class> _classes = new();
+    private List<Section> _sections = new();
+    private string? _error;
+    private bool _saving;
+    private int _currentYearId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var year = await SettingsSvc.GetCurrentYearAsync();
+        _currentYearId = year?.Id ?? 1;
+        _student = await StudentSvc.GetByIdAsync(Id);
+        _guardian = await StudentSvc.GetGuardianByStudentIdAsync(Id);
+        _classes = await ClassSvc.GetAllAsync(_currentYearId);
+        if (_student?.SectionId.HasValue == true)
+        {
+            var sec = _classes.SelectMany(c => c.Sections).FirstOrDefault(s => s.Id == _student.SectionId);
+            if (sec != null) _sections = await ClassSvc.GetSectionsAsync(sec.ClassId);
+        }
+    }
+
+    private async Task OnClassChange(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int classId))
+            _sections = await ClassSvc.GetSectionsAsync(classId);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_student == null) return;
+        _saving = true;
+        try
+        {
+            if (_guardian != null) { _student.Guardian = _guardian; }
+            await StudentSvc.UpdateAsync(_student);
+            Nav.NavigateTo($"/students/{Id}");
+        }
+        catch (Exception ex) { _error = $"Error: {ex.Message}"; _saving = false; }
+    }
+}

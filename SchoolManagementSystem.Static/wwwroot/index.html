@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Replaced with /<repo-name>/ by the GitHub Pages workflow. -->
+    <base href="/" />
+    <title>EduSmart SMS — Live Demo</title>
+
+    <!-- GitHub Pages serves 404.html for deep links; this restores the real path so Blazor routes it. -->
+    <script>
+        (function (l) {
+            if (l.search[1] === '/') {
+                var decoded = l.search.slice(1).split('&').map(function (s) {
+                    return s.replace(/~and~/g, '&');
+                }).join('?');
+                window.history.replaceState(null, null, l.pathname.slice(0, -1) + decoded + l.hash);
+            }
+        }(window.location));
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="bootstrap/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" />
+    <link rel="stylesheet" href="app.css" />
+    <link rel="stylesheet" href="SchoolManagementSystem.Static.styles.css" />
+    <link rel="stylesheet" href="css/school-custom.css" />
+    <link rel="icon" type="image/png" href="favicon.png" />
+</head>
+
+<body>
+    <div id="app">
+        <div class="d-flex flex-column align-items-center justify-content-center" style="min-height:100vh;">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="text-muted small mt-3">Loading EduSmart SMS…</p>
+        </div>
+    </div>
+
+    <div id="blazor-error-ui" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9999;background:#fef2f2;border-top:2px solid #fecaca;padding:10px 20px;font-size:.84rem;color:#991b1b;">
+        An error occurred while running the demo. <a href="" style="color:var(--primary);">Reload</a>
+    </div>
+
+    <script>
+        // Sidebar toggle (mobile)
+        window.toggleSidebar = function () {
+            var sb = document.getElementById('sidebar');
+            var ov = document.getElementById('sidebarOverlay');
+            if (sb) sb.classList.toggle('open');
+            if (ov) ov.classList.toggle('show');
+        };
+        window.closeSidebar = function () {
+            var sb = document.getElementById('sidebar');
+            var ov = document.getElementById('sidebarOverlay');
+            if (sb) sb.classList.remove('open');
+            if (ov) ov.classList.remove('show');
+        };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script src="js/school-interop.js"></script>
+    <script src="_framework/blazor.webassembly.js"></script>
+</body>
+</html>

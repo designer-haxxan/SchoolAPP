@@ -1,0 +1,233 @@
+@page "/attendance"
+@page "/attendance/mark"
+@using SchoolManagementSystem.Data.Models
+@using SchoolManagementSystem.Services
+@inject AttendanceService AttendanceService
+@inject ClassService ClassService
+@inject StudentService StudentService
+@attribute [Authorize(Policy = "TeacherOrAdmin")]
+
+<PageTitle>Mark Attendance</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1"><i class="bi bi-calendar-check me-2 text-primary"></i>Mark Attendance</h4>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
+            <li class="breadcrumb-item"><a href="">Dashboard</a></li>
+            <li class="breadcrumb-item active">Attendance</li>
+        </ol></nav>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">Date *</label>
+                <input type="date" class="form-control" value="@selectedDate.ToString("yyyy-MM-dd")"
+                       @onchange="OnDateChange" max="@DateTime.Today.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Class *</label>
+                <select class="form-select" @onchange="OnClassChange">
+                    <option value="">Select Class...</option>
+                    @foreach (var c in classes)
+                    {
+                        <option value="@c.Id">@c.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Section *</label>
+                <select class="form-select" @onchange="OnSectionChange" disabled="@(selectedClassId == 0)">
+                    <option value="">Select Section...</option>
+                    @foreach (var s in sections)
+                    {
+                        <option value="@s.Id">@s.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button class="btn btn-primary w-100" @onclick="LoadStudents" disabled="@(selectedSectionId == 0)">
+                    <i class="bi bi-people me-1"></i>Load Students
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+}
+else if (attendanceItems.Count > 0)
+{
+    <div class="card shadow-sm">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <span class="fw-semibold">Students — @selectedDate.ToString("dd MMMM yyyy")</span>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-success" @onclick="MarkAllPresent"><i class="bi bi-check-all me-1"></i>All Present</button>
+                <button class="btn btn-sm btn-outline-danger" @onclick="MarkAllAbsent"><i class="bi bi-x-circle me-1"></i>All Absent</button>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>#</th>
+                        <th>Roll No</th>
+                        <th>Student Name</th>
+                        <th>Present</th>
+                        <th>Absent</th>
+                        <th>Late</th>
+                        <th>Leave</th>
+                        <th>Remarks</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @for (int i = 0; i < attendanceItems.Count; i++)
+                    {
+                        var item = attendanceItems[i];
+                        var idx = i;
+                        <tr>
+                            <td>@(i + 1)</td>
+                            <td><span class="badge bg-secondary">@item.RollNumber</span></td>
+                            <td>@item.StudentName</td>
+                            <td class="text-center">
+                                <input type="radio" name="att_@item.StudentId" class="form-check-input"
+                                       checked="@(item.Status == AttendanceStatus.Present)"
+                                       @onchange="() => item.Status = AttendanceStatus.Present" />
+                            </td>
+                            <td class="text-center">
+                                <input type="radio" name="att_@item.StudentId" class="form-check-input"
+                                       checked="@(item.Status == AttendanceStatus.Absent)"
+                                       @onchange="() => item.Status = AttendanceStatus.Absent" />
+                            </td>
+                            <td class="text-center">
+                                <input type="radio" name="att_@item.StudentId" class="form-check-input"
+                                       checked="@(item.Status == AttendanceStatus.Late)"
+                                       @onchange="() => item.Status = AttendanceStatus.Late" />
+                            </td>
+                            <td class="text-center">
+                                <input type="radio" name="att_@item.StudentId" class="form-check-input"
+                                       checked="@(item.Status == AttendanceStatus.Leave)"
+                                       @onchange="() => item.Status = AttendanceStatus.Leave" />
+                            </td>
+                            <td>
+                                <input type="text" class="form-control form-control-sm" placeholder="Optional"
+                                       value="@item.Remarks"
+                                       @onchange="e => item.Remarks = e.Value?.ToString()" />
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+            <div class="small text-muted">
+                <span class="badge bg-success-subtle text-success me-2">Present: @attendanceItems.Count(x => x.Status == AttendanceStatus.Present)</span>
+                <span class="badge bg-danger-subtle text-danger me-2">Absent: @attendanceItems.Count(x => x.Status == AttendanceStatus.Absent)</span>
+                <span class="badge bg-warning-subtle text-warning me-2">Late: @attendanceItems.Count(x => x.Status == AttendanceStatus.Late)</span>
+                <span class="badge bg-info-subtle text-info">Leave: @attendanceItems.Count(x => x.Status == AttendanceStatus.Leave)</span>
+            </div>
+            <button class="btn btn-success" @onclick="SaveAttendance" disabled="@isSaving">
+                @if (isSaving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                <i class="bi bi-save me-1"></i>Save Attendance
+            </button>
+        </div>
+    </div>
+
+    @if (savedMsg)
+    {
+        <div class="alert alert-success mt-3 alert-dismissible">
+            <i class="bi bi-check-circle me-2"></i>Attendance saved successfully!
+            <button type="button" class="btn-close" @onclick="() => savedMsg = false"></button>
+        </div>
+    }
+}
+
+@code {
+    DateTime selectedDate = DateTime.Today;
+    int selectedClassId, selectedSectionId;
+    List<Class> classes = [];
+    List<Section> sections = [];
+    List<AttendanceEntry> attendanceItems = [];
+    bool isLoading, isSaving, savedMsg;
+
+    class AttendanceEntry
+    {
+        public int StudentId { get; set; }
+        public string StudentName { get; set; } = "";
+        public int RollNumber { get; set; }
+        public AttendanceStatus Status { get; set; } = AttendanceStatus.Present;
+        public string? Remarks { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        classes = await ClassService.GetAllAsync();
+    }
+
+    void OnDateChange(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var d)) selectedDate = d;
+    }
+
+    async Task OnClassChange(ChangeEventArgs e)
+    {
+        selectedClassId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0;
+        selectedSectionId = 0; attendanceItems.Clear();
+        if (selectedClassId > 0)
+        {
+            var cls = await ClassService.GetByIdAsync(selectedClassId);
+            sections = cls?.Sections?.ToList() ?? [];
+        }
+        else sections = [];
+    }
+
+    void OnSectionChange(ChangeEventArgs e)
+    {
+        selectedSectionId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0;
+        attendanceItems.Clear();
+    }
+
+    async Task LoadStudents()
+    {
+        if (selectedSectionId == 0) return;
+        isLoading = true;
+        var dateOnly = DateOnly.FromDateTime(selectedDate);
+        var existing = await AttendanceService.GetByDateSectionAsync(dateOnly, selectedSectionId);
+        var students = await StudentService.GetBySectionAsync(selectedSectionId);
+        attendanceItems = students.Select(s =>
+        {
+            var ex = existing.FirstOrDefault(a => a.StudentId == s.Id);
+            return new AttendanceEntry
+            {
+                StudentId = s.Id,
+                StudentName = s.FullName,
+                RollNumber = s.RollNumber,
+                Status = ex?.Status ?? AttendanceStatus.Present,
+                Remarks = ex?.Remarks
+            };
+        }).OrderBy(x => x.RollNumber).ToList();
+        isLoading = false;
+    }
+
+    void MarkAllPresent() { foreach (var i in attendanceItems) i.Status = AttendanceStatus.Present; }
+    void MarkAllAbsent() { foreach (var i in attendanceItems) i.Status = AttendanceStatus.Absent; }
+
+    async Task SaveAttendance()
+    {
+        isSaving = true;
+        var records = attendanceItems.Select(a => new StudentAttendance
+        {
+            StudentId = a.StudentId,
+            SectionId = selectedSectionId,
+            Date = DateOnly.FromDateTime(selectedDate),
+            Status = a.Status,
+            Remarks = a.Remarks
+        }).ToList();
+        await AttendanceService.SaveStudentAttendanceAsync(records);
+        isSaving = false; savedMsg = true;
+    }
+}

@@ -1,0 +1,88 @@
+@page "/exams"
+@using SchoolManagementSystem.Data.Models
+@using SchoolManagementSystem.Services
+@inject ExamService ExamService
+@inject NavigationManager Nav
+@attribute [Authorize(Policy = "StaffOnly")]
+
+<PageTitle>Examinations</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1"><i class="bi bi-journal-check me-2 text-primary"></i>Examinations</h4>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
+            <li class="breadcrumb-item"><a href="">Dashboard</a></li>
+            <li class="breadcrumb-item active">Exams</li>
+        </ol></nav>
+    </div>
+    <a href="exams/create" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>New Exam</a>
+</div>
+
+@if (isLoading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+}
+else
+{
+    <div class="row g-4">
+        @foreach (var exam in exams)
+        {
+            <div class="col-md-4">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">@exam.Name</h6>
+                        <span class="badge @GetExamTypeBadge(exam.Type)">@exam.Type</span>
+                    </div>
+                    <div class="card-body">
+                        <p class="small text-muted mb-1"><i class="bi bi-calendar me-2"></i>@exam.StartDate.ToString("dd MMM") – @exam.EndDate.ToString("dd MMM yyyy")</p>
+                        <p class="small text-muted mb-2"><i class="bi bi-list me-2"></i>@exam.Schedules?.Count schedules</p>
+                    </div>
+                    <div class="card-footer bg-white d-flex gap-2">
+                        <a href="exams/@exam.Id/marks" class="btn btn-sm btn-outline-primary flex-grow-1">
+                            <i class="bi bi-pencil me-1"></i>Enter Marks
+                        </a>
+                        <a href="exams/@exam.Id/results" class="btn btn-sm btn-outline-info">
+                            <i class="bi bi-bar-chart"></i>
+                        </a>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteExam(exam.Id)">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+        @if (exams.Count == 0)
+        {
+            <div class="col-12 text-center py-5 text-muted">
+                <i class="bi bi-journal-x display-4"></i>
+                <p class="mt-2">No exams created yet.</p>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    List<Exam> exams = [];
+    bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        exams = await ExamService.GetAllAsync();
+        isLoading = false;
+    }
+
+    async Task DeleteExam(int id)
+    {
+        await ExamService.DeleteAsync(id);
+        exams = await ExamService.GetAllAsync();
+    }
+
+    string GetExamTypeBadge(ExamType t) => t switch
+    {
+        ExamType.Monthly => "bg-primary",
+        ExamType.MidTerm => "bg-info",
+        ExamType.Terminal => "bg-warning text-dark",
+        ExamType.Annual => "bg-danger",
+        _ => "bg-secondary"
+    };
+}

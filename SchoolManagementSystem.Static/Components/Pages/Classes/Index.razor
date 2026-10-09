@@ -1,0 +1,200 @@
+@page "/classes"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Policy = "StaffOnly")]
+@inject ClassService ClassSvc
+@inject TeacherService TeacherSvc
+@inject SettingsService SettingsSvc
+@inject SubjectService SubjectSvc
+
+<PageTitle>Classes & Sections</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title"><i class="bi bi-building me-2"></i>Classes &amp; Sections</h1>
+        <p class="page-subtitle">Manage classes, sections, and subject assignments</p>
+    </div>
+    <AuthorizeView Roles="Admin">
+        <button class="btn btn-primary" @onclick="() => { _classForm = new Class { AcademicYearId = _currentYearId }; _showClassForm = true; }">
+            <i class="bi bi-plus-circle me-1"></i> Add Class
+        </button>
+    </AuthorizeView>
+</div>
+
+@if (_loading) { <div class="text-center py-4"><div class="spinner-border text-primary"></div></div> }
+else
+{
+    <div class="row g-3">
+        @foreach (var cls in _classes)
+        {
+            <div class="col-md-6 col-xl-4">
+                <div class="school-card">
+                    <div class="card-header">
+                        <h6 class="mb-0">
+                            <i class="bi bi-building me-2 text-primary"></i>@cls.Name
+                        </h6>
+                        <div class="d-flex gap-1">
+                            <button class="btn btn-xs btn-outline-primary" @onclick="() => OpenSubjects(cls)" title="Subjects"><i class="bi bi-book"></i></button>
+                            <button class="btn btn-xs btn-outline-success" @onclick="() => OpenAddSection(cls)" title="Add Section"><i class="bi bi-plus"></i></button>
+                            <AuthorizeView Roles="Admin">
+                                <button class="btn btn-xs btn-outline-secondary" @onclick="() => EditClass(cls)" title="Edit"><i class="bi bi-pencil"></i></button>
+                                <button class="btn btn-xs btn-outline-danger" @onclick="() => DeleteClassAsync(cls.Id)" title="Delete"><i class="bi bi-trash"></i></button>
+                            </AuthorizeView>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        @if (cls.Sections.Count == 0)
+                        {
+                            <p class="text-muted text-center py-3 mb-0" style="font-size:0.85rem;">No sections yet</p>
+                        }
+                        else
+                        {
+                            <table class="table-school w-100">
+                                <thead><tr><th>Section</th><th>Capacity</th><th>Class Teacher</th><th></th></tr></thead>
+                                <tbody>
+                                    @foreach (var sec in cls.Sections)
+                                    {
+                                        <tr>
+                                            <td><strong>Section @sec.Name</strong></td>
+                                            <td>@sec.Capacity</td>
+                                            <td>@(sec.ClassTeacher?.FullName ?? "—")</td>
+                                            <td>
+                                                <button class="btn btn-xs btn-outline-primary me-1" @onclick="() => EditSection(sec)"><i class="bi bi-pencil"></i></button>
+                                                <button class="btn btn-xs btn-outline-danger" @onclick="() => DeleteSectionAsync(sec.Id)"><i class="bi bi-trash"></i></button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<!-- Add/Edit Section Modal -->
+@if (_showSectionForm)
+{
+    <div class="modal-backdrop fade show"></div>
+    <div class="modal d-block" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(_sectionForm.Id == 0 ? "Add Section" : "Edit Section") — @_selectedClass?.Name</h5>
+                    <button type="button" class="btn-close" @onclick="() => _showSectionForm = false"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="_sectionForm" OnValidSubmit="SaveSectionAsync">
+                        <DataAnnotationsValidator />
+                        <div class="mb-3">
+                            <label class="form-label form-label-required">Section Name</label>
+                            <InputText @bind-Value="_sectionForm.Name" class="form-control" placeholder="A, B, C..." />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Capacity</label>
+                            <InputNumber @bind-Value="_sectionForm.Capacity" class="form-control" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Class Teacher</label>
+                            <InputSelect @bind-Value="_sectionForm.ClassTeacherId" class="form-select">
+                                <option value="">-- Select Teacher --</option>
+                                @foreach (var t in _teachers)
+                                {
+                                    <option value="@t.Id">@t.FullName</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">Save Section</button>
+                            <button type="button" class="btn btn-outline-secondary" @onclick="() => _showSectionForm = false">Cancel</button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Add Class Modal -->
+@if (_showClassForm)
+{
+    <div class="modal-backdrop fade show"></div>
+    <div class="modal d-block" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(_classForm.Id == 0 ? "Add Class" : "Edit Class")</h5>
+                    <button type="button" class="btn-close" @onclick="() => _showClassForm = false"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="_classForm" OnValidSubmit="SaveClassAsync">
+                        <DataAnnotationsValidator />
+                        <div class="mb-3">
+                            <label class="form-label form-label-required">Class Name</label>
+                            <InputText @bind-Value="_classForm.Name" class="form-control" placeholder="e.g. Class 1, KG, Nursery" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Display Order</label>
+                            <InputNumber @bind-Value="_classForm.OrderIndex" class="form-control" />
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">Save</button>
+                            <button type="button" class="btn btn-outline-secondary" @onclick="() => _showClassForm = false">Cancel</button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Class> _classes = new();
+    private List<Teacher> _teachers = new();
+    private bool _loading = true;
+    private int _currentYearId;
+
+    private bool _showSectionForm, _showClassForm;
+    private Section _sectionForm = new();
+    private Class _classForm = new();
+    private Class? _selectedClass;
+    private bool _showSubjects;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var year = await SettingsSvc.GetCurrentYearAsync();
+        _currentYearId = year?.Id ?? 1;
+        _teachers = await TeacherSvc.GetAllAsync(true);
+        await LoadClassesAsync();
+        _loading = false;
+    }
+
+    private async Task LoadClassesAsync()
+        => _classes = await ClassSvc.GetAllAsync(_currentYearId);
+
+    private void OpenAddSection(Class cls) { _selectedClass = cls; _sectionForm = new Section { ClassId = cls.Id, Capacity = 40 }; _showSectionForm = true; }
+    private void EditSection(Section sec) { _sectionForm = new Section { Id = sec.Id, Name = sec.Name, Capacity = sec.Capacity, ClassId = sec.ClassId, ClassTeacherId = sec.ClassTeacherId }; _showSectionForm = true; }
+    private void EditClass(Class cls) { _classForm = new Class { Id = cls.Id, Name = cls.Name, OrderIndex = cls.OrderIndex, AcademicYearId = cls.AcademicYearId }; _showClassForm = true; }
+    private void OpenSubjects(Class cls) { _selectedClass = cls; }
+
+    private async Task SaveSectionAsync()
+    {
+        if (_sectionForm.Id == 0) await ClassSvc.CreateSectionAsync(_sectionForm);
+        else await ClassSvc.UpdateSectionAsync(_sectionForm);
+        await LoadClassesAsync();
+        _showSectionForm = false;
+    }
+
+    private async Task SaveClassAsync()
+    {
+        _classForm.AcademicYearId = _currentYearId;
+        if (_classForm.Id == 0) await ClassSvc.CreateAsync(_classForm);
+        else await ClassSvc.UpdateAsync(_classForm);
+        await LoadClassesAsync();
+        _showClassForm = false;
+    }
+
+    private async Task DeleteClassAsync(int id) { await ClassSvc.DeleteAsync(id); await LoadClassesAsync(); }
+    private async Task DeleteSectionAsync(int id) { await ClassSvc.DeleteSectionAsync(id); await LoadClassesAsync(); }
+}

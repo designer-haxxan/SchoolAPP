@@ -1,0 +1,219 @@
+@page "/students/promote"
+@using SchoolManagementSystem.Data.Models
+@using SchoolManagementSystem.Services
+@inject StudentService StudentService
+@inject ClassService ClassService
+@inject SettingsService SettingsService
+@attribute [Authorize(Policy = "AdminOnly")]
+
+<PageTitle>Batch Promotion</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1"><i class="bi bi-arrow-up-circle me-2 text-primary"></i>Batch Promotion</h4>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
+            <li class="breadcrumb-item"><a href="">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="students">Students</a></li>
+            <li class="breadcrumb-item active">Promote</li>
+        </ol></nav>
+    </div>
+</div>
+
+@if (step == 1)
+{
+    <div class="card shadow-sm">
+        <div class="card-header bg-white fw-semibold">Step 1: Select Source Class & Target</div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">From Academic Year</label>
+                    <select class="form-select" @bind="fromYearId">
+                        @foreach (var y in academicYears)
+                        { <option value="@y.Id">@y.Name</option> }
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">From Class</label>
+                    <select class="form-select" @bind="fromClassId" @bind:after="LoadStudents">
+                        <option value="0">-- Select Class --</option>
+                        @foreach (var c in classes)
+                        { <option value="@c.Id">@c.Name</option> }
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">To Academic Year</label>
+                    <select class="form-select" @bind="toYearId">
+                        @foreach (var y in academicYears)
+                        { <option value="@y.Id">@y.Name</option> }
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">To Class</label>
+                    <select class="form-select" @bind="toClassId" @bind:after="LoadToSections">
+                        <option value="0">-- Select Class --</option>
+                        @foreach (var c in classes)
+                        { <option value="@c.Id">@c.Name</option> }
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">To Section (optional)</label>
+                    <select class="form-select" @bind="toSectionId">
+                        <option value="0">-- Auto Assign --</option>
+                        @foreach (var s in toSections)
+                        { <option value="@s.Id">@s.Name</option> }
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="card-footer text-end">
+            <button class="btn btn-primary" @onclick="GoToStep2" disabled="@(fromClassId == 0 || toClassId == 0 || students.Count == 0)">
+                Next: Review Students <i class="bi bi-arrow-right ms-1"></i>
+            </button>
+        </div>
+    </div>
+
+    @if (fromClassId > 0 && students.Count == 0 && !isLoading)
+    {
+        <div class="alert alert-info mt-3"><i class="bi bi-info-circle me-2"></i>No active students found in the selected class.</div>
+    }
+    @if (isLoading)
+    {
+        <div class="text-center py-4"><div class="spinner-border text-primary"></div></div>
+    }
+}
+else if (step == 2)
+{
+    <div class="card shadow-sm">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <span class="fw-semibold">Step 2: Review & Confirm (@students.Count students)</span>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-success" @onclick="SelectAll">Select All Promoted</button>
+                <button class="btn btn-sm btn-outline-danger" @onclick="SelectNone">Select None</button>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Roll#</th>
+                        <th>Name</th>
+                        <th>Reg No</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in promotionRows)
+                    {
+                        <tr>
+                            <td>@row.Student.RollNumber</td>
+                            <td>@row.Student.FullName</td>
+                            <td><span class="badge bg-secondary">@row.Student.RegistrationNumber</span></td>
+                            <td>
+                                <select class="form-select form-select-sm" style="width:150px"
+                                        value="@row.Status"
+                                        @onchange="e => row.Status = Enum.Parse<PromotionStatus>(e.Value!.ToString()!)">
+                                    <option value="@PromotionStatus.Promoted">Promoted</option>
+                                    <option value="@PromotionStatus.Detained">Detained</option>
+                                    <option value="@PromotionStatus.Transferred">Left School</option>
+                                </select>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="card-footer d-flex justify-content-between">
+            <button class="btn btn-secondary" @onclick="() => step = 1"><i class="bi bi-arrow-left me-1"></i>Back</button>
+            <button class="btn btn-success" @onclick="RunPromotion" disabled="@isPromoting">
+                @if (isPromoting) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                <i class="bi bi-check-lg me-1"></i>Confirm Promotion (@promotionRows.Count(r => r.Status == PromotionStatus.Promoted) promoted)
+            </button>
+        </div>
+    </div>
+}
+else if (step == 3)
+{
+    <div class="text-center py-5">
+        <i class="bi bi-check-circle-fill text-success display-3"></i>
+        <h4 class="mt-3">Promotion Complete!</h4>
+        <p class="text-muted">@promotedCount students promoted, @detainedCount detained, @leftCount left school.</p>
+        <a href="students" class="btn btn-primary me-2"><i class="bi bi-people me-1"></i>View Students</a>
+        <a href="students/promote" class="btn btn-outline-secondary">Promote Another Batch</a>
+    </div>
+}
+
+@code {
+    int step = 1;
+    int fromYearId, toYearId, fromClassId, toClassId, toSectionId;
+    List<AcademicYear> academicYears = [];
+    List<Class> classes = [];
+    List<Section> toSections = [];
+    List<Student> students = [];
+    List<PromotionRow> promotionRows = [];
+    bool isLoading, isPromoting;
+    int promotedCount, detainedCount, leftCount;
+
+    class PromotionRow
+    {
+        public Student Student { get; set; } = null!;
+        public PromotionStatus Status { get; set; } = PromotionStatus.Promoted;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        academicYears = await SettingsService.GetAcademicYearsAsync();
+        classes = await ClassService.GetAllAsync();
+        var current = academicYears.FirstOrDefault(y => y.IsCurrent);
+        fromYearId = current?.Id ?? (academicYears.FirstOrDefault()?.Id ?? 0);
+        toYearId = fromYearId;
+    }
+
+    async Task LoadStudents()
+    {
+        if (fromClassId == 0) return;
+        isLoading = true;
+        students = await StudentService.GetByClassAsync(fromClassId);
+        isLoading = false;
+    }
+
+    async Task LoadToSections()
+    {
+        if (toClassId == 0) { toSections = []; return; }
+        var cls = await ClassService.GetByIdAsync(toClassId);
+        toSections = cls?.Sections?.ToList() ?? [];
+        toSectionId = 0;
+    }
+
+    void GoToStep2()
+    {
+        promotionRows = students.Select(s => new PromotionRow { Student = s }).ToList();
+        step = 2;
+    }
+
+    void SelectAll() { foreach (var r in promotionRows) r.Status = PromotionStatus.Promoted; }
+    void SelectNone() { foreach (var r in promotionRows) r.Status = PromotionStatus.Detained; }
+
+    async Task RunPromotion()
+    {
+        isPromoting = true;
+        var fromClass = classes.FirstOrDefault(c => c.Id == fromClassId);
+        var promotions = promotionRows.Select(r => new Promotion
+        {
+            StudentId = r.Student.Id,
+            FromClassId = fromClassId,
+            ToClassId = toClassId,
+            ToSectionId = toSectionId == 0 ? null : toSectionId,
+            FromAcademicYearId = fromYearId,
+            ToAcademicYearId = toYearId,
+            Status = r.Status,
+            PromotedOn = DateTime.UtcNow
+        }).ToList();
+
+        await StudentService.PromoteStudentsAsync(promotions);
+        promotedCount = promotions.Count(p => p.Status == PromotionStatus.Promoted);
+        detainedCount = promotions.Count(p => p.Status == PromotionStatus.Detained);
+        leftCount = promotions.Count(p => p.Status == PromotionStatus.Transferred);
+        isPromoting = false;
+        step = 3;
+    }
+}

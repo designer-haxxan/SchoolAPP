@@ -1,0 +1,166 @@
+@implements IDisposable
+@inject NavigationManager NavigationManager
+
+<nav class="sb-nav">
+
+  <!-- Dashboard -->
+  <NavLink class="sb-link" href="" Match="NavLinkMatch.All">
+    <i class="bi bi-grid-1x2-fill sb-icon"></i>
+    <span>Dashboard</span>
+  </NavLink>
+
+  <!-- ACADEMICS -->
+  <div class="sb-section">Academics</div>
+
+  <NavLink class="sb-link" href="students">
+    <i class="bi bi-people-fill sb-icon"></i>
+    <span>Students</span>
+  </NavLink>
+
+  <NavLink class="sb-link" href="teachers">
+    <i class="bi bi-person-workspace sb-icon"></i>
+    <span>Teachers</span>
+  </NavLink>
+
+  <NavLink class="sb-link" href="classes">
+    <i class="bi bi-building sb-icon"></i>
+    <span>Classes &amp; Sections</span>
+  </NavLink>
+
+  <NavLink class="sb-link" href="subjects">
+    <i class="bi bi-book-fill sb-icon"></i>
+    <span>Subjects</span>
+  </NavLink>
+
+  <!-- OPERATIONS -->
+  <div class="sb-section">Operations</div>
+
+  <NavLink class="sb-link" href="attendance">
+    <i class="bi bi-calendar-check-fill sb-icon"></i>
+    <span>Attendance</span>
+  </NavLink>
+
+  <NavLink class="sb-link" href="exams">
+    <i class="bi bi-pencil-square sb-icon"></i>
+    <span>Examinations</span>
+  </NavLink>
+
+  <NavLink class="sb-link" href="timetable">
+    <i class="bi bi-grid-3x3-gap-fill sb-icon"></i>
+    <span>Timetable</span>
+  </NavLink>
+
+  <!-- Fee Management (collapsible) -->
+  <button type="button"
+          class="sb-link sb-group-toggle @(IsFeeActive ? "active" : "")"
+          @onclick="ToggleFees">
+    <i class="bi bi-cash-coin sb-icon"></i>
+    <span>Fee Management</span>
+    <i class="bi @(feesOpen ? "bi-chevron-up" : "bi-chevron-down") sb-chevron"></i>
+  </button>
+
+  @if (feesOpen)
+  {
+    <div class="sb-submenu">
+      <NavLink class="sb-link sb-sub-link" href="fees" Match="NavLinkMatch.All">
+        <i class="bi bi-speedometer2 sb-icon"></i><span>Overview</span>
+      </NavLink>
+      <NavLink class="sb-link sb-sub-link" href="fees/structure">
+        <i class="bi bi-table sb-icon"></i><span>Fee Structure</span>
+      </NavLink>
+      <NavLink class="sb-link sb-sub-link" href="fees/vouchers">
+        <i class="bi bi-receipt sb-icon"></i><span>Vouchers</span>
+      </NavLink>
+      <NavLink class="sb-link sb-sub-link" href="fees/collect">
+        <i class="bi bi-cash-stack sb-icon"></i><span>Collect Payment</span>
+      </NavLink>
+      <NavLink class="sb-link sb-sub-link" href="fees/pending">
+        <i class="bi bi-exclamation-triangle sb-icon"></i><span>Pending / Overdue</span>
+      </NavLink>
+      <NavLink class="sb-link sb-sub-link" href="fees/scholarships">
+        <i class="bi bi-award sb-icon"></i><span>Scholarships</span>
+      </NavLink>
+    </div>
+  }
+
+  <!-- FINANCE & ADMIN -->
+  <div class="sb-section">Finance &amp; Admin</div>
+
+  <!-- Finance (collapsible) -->
+  <button type="button"
+          class="sb-link sb-group-toggle @(IsFinanceActive ? "active" : "")"
+          @onclick="ToggleFinance">
+    <i class="bi bi-wallet2 sb-icon"></i>
+    <span>Finance</span>
+    <i class="bi @(financeOpen ? "bi-chevron-up" : "bi-chevron-down") sb-chevron"></i>
+  </button>
+
+  @if (financeOpen)
+  {
+    <div class="sb-submenu">
+      <NavLink class="sb-link sb-sub-link" href="finance" Match="NavLinkMatch.All">
+        <i class="bi bi-speedometer2 sb-icon"></i><span>Overview</span>
+      </NavLink>
+      <NavLink class="sb-link sb-sub-link" href="finance/expenses">
+        <i class="bi bi-receipt-cutoff sb-icon"></i><span>Expenses</span>
+      </NavLink>
+      <NavLink class="sb-link sb-sub-link" href="finance/salaries">
+        <i class="bi bi-people sb-icon"></i><span>Salary Sheet</span>
+      </NavLink>
+      <NavLink class="sb-link sb-sub-link" href="finance/cashbook">
+        <i class="bi bi-journal-text sb-icon"></i><span>Cash Book</span>
+      </NavLink>
+    </div>
+  }
+
+  <NavLink class="sb-link" href="communication">
+    <i class="bi bi-megaphone-fill sb-icon"></i>
+    <span>Communication</span>
+  </NavLink>
+
+  <NavLink class="sb-link" href="reports">
+    <i class="bi bi-bar-chart-fill sb-icon"></i>
+    <span>Reports</span>
+  </NavLink>
+
+  <!-- SYSTEM -->
+  <div class="sb-section">System</div>
+
+
+
+  <NavLink class="sb-link" href="settings">
+    <i class="bi bi-gear-fill sb-icon"></i>
+    <span>Settings</span>
+  </NavLink>
+
+</nav>
+
+@code {
+  private string? currentUrl;
+  private bool feesOpen;
+  private bool financeOpen;
+
+  private bool IsFeeActive     => currentUrl?.StartsWith("fees")    == true;
+  private bool IsFinanceActive => currentUrl?.StartsWith("finance") == true;
+
+  protected override void OnInitialized()
+  {
+    currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+    feesOpen    = IsFeeActive;
+    financeOpen = IsFinanceActive;
+    NavigationManager.LocationChanged += OnLocationChanged;
+  }
+
+  private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+  {
+    currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
+    if (IsFeeActive)     feesOpen    = true;
+    if (IsFinanceActive) financeOpen = true;
+    StateHasChanged();
+  }
+
+  private void ToggleFees()    => feesOpen    = !feesOpen;
+  private void ToggleFinance() => financeOpen = !financeOpen;
+
+  public void Dispose() => NavigationManager.LocationChanged -= OnLocationChanged;
+}

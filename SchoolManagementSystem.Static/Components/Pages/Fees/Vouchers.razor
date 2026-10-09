@@ -1,0 +1,223 @@
+@page "/fees/vouchers"
+@using SchoolManagementSystem.Data.Models
+@using SchoolManagementSystem.Services
+@inject FeeService FeeService
+@inject ClassService ClassService
+@attribute [Authorize(Policy = "AccountantOrAdmin")]
+
+<PageTitle>Fee Vouchers</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1"><i class="bi bi-receipt me-2 text-primary"></i>Fee Vouchers</h4>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
+            <li class="breadcrumb-item"><a href="">Dashboard</a></li>
+            <li class="breadcrumb-item active">Vouchers</li>
+        </ol></nav>
+    </div>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-primary" data-bs-toggle="modal" @onclick="() => showGenerate = true">
+            <i class="bi bi-lightning me-1"></i>Generate Bulk
+        </button>
+        <a href="fees/collect" class="btn btn-success"><i class="bi bi-cash-coin me-1"></i>Collect Payment</a>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-2">
+                <select class="form-select" @bind="filterMonth">
+                    <option value="0">All Months</option>
+                    @for (int m = 1; m <= 12; m++)
+                    { <option value="@m">@(new DateTime(2024, m, 1).ToString("MMMM"))</option> }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" @bind="filterYear">
+                    @for (int y = DateTime.Now.Year - 1; y <= DateTime.Now.Year + 1; y++)
+                    { <option value="@y">@y</option> }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select class="form-select" @bind="filterStatus">
+                    <option value="">All Status</option>
+                    @foreach (var s in Enum.GetValues<VoucherStatus>())
+                    { <option value="@s">@s</option> }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" placeholder="Search student..." value="@searchTerm" @oninput="Search" />
+                </div>
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-primary w-100" @onclick="Load">Search</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+}
+else
+{
+    <div class="card shadow-sm">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <span class="small text-muted">@totalCount vouchers found</span>
+            <div class="d-flex gap-3 small">
+                <span class="text-muted">Total: <strong>PKR @vouchers.Sum(v => v.TotalAmount).ToString("N0")</strong></span>
+                <span class="text-success">Paid: <strong>PKR @vouchers.Sum(v => v.PaidAmount).ToString("N0")</strong></span>
+                <span class="text-danger">Pending: <strong>PKR @vouchers.Sum(v => v.PendingAmount).ToString("N0")</strong></span>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 small">
+                <thead class="table-light">
+                    <tr>
+                        <th>Voucher #</th>
+                        <th>Student</th>
+                        <th>Class</th>
+                        <th>Month/Year</th>
+                        <th>Total</th>
+                        <th>Discount</th>
+                        <th>Paid</th>
+                        <th>Pending</th>
+                        <th>Due Date</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var v in vouchers)
+                    {
+                        <tr>
+                            <td><span class="badge bg-secondary">@v.VoucherNumber</span></td>
+                            <td>@v.Student?.FullName</td>
+                            <td>@v.Student?.Section?.Class?.Name</td>
+                            <td>@(new DateTime(v.Year, v.Month, 1).ToString("MMM yyyy"))</td>
+                            <td>@v.TotalAmount.ToString("N0")</td>
+                            <td class="text-success">@(v.Discount > 0 ? v.Discount.ToString("N0") : "—")</td>
+                            <td class="text-success">@v.PaidAmount.ToString("N0")</td>
+                            <td class="@(v.PendingAmount > 0 ? "text-danger fw-semibold" : "text-success")">@v.PendingAmount.ToString("N0")</td>
+                            <td>@v.DueDate.ToString("dd MMM")</td>
+                            <td>
+                                <span class="badge @GetStatusBadge(v.Status)">@v.Status</span>
+                            </td>
+                            <td>
+                                <a class="btn btn-sm btn-outline-secondary" href="fees/challan/@v.Id" target="_blank" title="Print challan"><i class="bi bi-printer"></i></a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="card-footer d-flex justify-content-between align-items-center">
+            <small class="text-muted">Page @currentPage of @totalPages</small>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-secondary" disabled="@(currentPage == 1)" @onclick="PrevPage"><i class="bi bi-chevron-left"></i></button>
+                <button class="btn btn-sm btn-outline-secondary" disabled="@(currentPage >= totalPages)" @onclick="NextPage"><i class="bi bi-chevron-right"></i></button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showGenerate)
+{
+    <div class="modal fade show d-block" style="background:rgba(0,0,0,0.5)">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Generate Bulk Vouchers</h5>
+                    <button type="button" class="btn-close" @onclick="() => showGenerate = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Class</label>
+                        <select class="form-select" @bind="genClassId">
+                            <option value="0">All Classes</option>
+                            @foreach (var c in classes)
+                            { <option value="@c.Id">@c.Name</option> }
+                        </select>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <label class="form-label">Month</label>
+                            <select class="form-select" @bind="genMonth">
+                                @for (int m = 1; m <= 12; m++)
+                                { <option value="@m">@(new DateTime(2024, m, 1).ToString("MMMM"))</option> }
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Year</label>
+                            <input type="number" class="form-control" @bind="genYear" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="() => showGenerate = false">Cancel</button>
+                    <button class="btn btn-primary" @onclick="GenerateBulk" disabled="@isGenerating">
+                        @if (isGenerating) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                        Generate
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    List<FeeVoucher> vouchers = [];
+    List<Class> classes = [];
+    int filterMonth, filterYear = DateTime.Now.Year, currentPage = 1, totalPages = 1, totalCount;
+    string filterStatus = "", searchTerm = "";
+    bool isLoading, showGenerate, isGenerating;
+    int genClassId, genMonth = DateTime.Now.Month, genYear = DateTime.Now.Year;
+
+    protected override async Task OnInitializedAsync()
+    {
+        classes = await ClassService.GetAllAsync();
+        filterMonth = DateTime.Now.Month;
+        await Load();
+    }
+
+    async Task Load()
+    {
+        isLoading = true;
+        VoucherStatus? status = Enum.TryParse<VoucherStatus>(filterStatus, out var vs) ? vs : null;
+        var (items, total) = await FeeService.GetVouchersAsync(filterMonth == 0 ? null : filterMonth, filterYear, status, searchTerm, currentPage, 20);
+        vouchers = items; totalCount = total;
+        totalPages = (int)Math.Ceiling(total / 20.0);
+        isLoading = false;
+    }
+
+    System.Threading.CancellationTokenSource? cts;
+    async Task Search(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? "";
+        cts?.Cancel(); cts = new();
+        try { await Task.Delay(400, cts.Token); currentPage = 1; await Load(); } catch { }
+    }
+
+    async Task PrevPage() { if (currentPage > 1) { currentPage--; await Load(); } }
+    async Task NextPage() { if (currentPage < totalPages) { currentPage++; await Load(); } }
+
+    async Task GenerateBulk()
+    {
+        isGenerating = true;
+        await FeeService.GenerateBulkVouchersAsync(genClassId == 0 ? null : genClassId, genMonth, genYear);
+        isGenerating = false; showGenerate = false;
+        await Load();
+    }
+
+    string GetStatusBadge(VoucherStatus s) => s switch
+    {
+        VoucherStatus.Paid => "bg-success",
+        VoucherStatus.Partial => "bg-warning text-dark",
+        VoucherStatus.Overdue => "bg-danger",
+        _ => "bg-secondary"
+    };
+}

@@ -1,0 +1,162 @@
+@page "/exams/{ExamId:int}/results"
+@using SchoolManagementSystem.Data.Models
+@using SchoolManagementSystem.Services
+@inject ExamService ExamService
+@inject ClassService ClassService
+@inject IJSRuntime JS
+@attribute [Authorize(Policy = "StaffOnly")]
+
+<PageTitle>Exam Results</PageTitle>
+
+@if (exam == null)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="mb-1"><i class="bi bi-bar-chart me-2 text-primary"></i>Results — @exam.Name</h4>
+            <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
+                <li class="breadcrumb-item"><a href="exams">Exams</a></li>
+                <li class="breadcrumb-item active">Results</li>
+            </ol></nav>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary" @onclick="PrintPage"><i class="bi bi-printer me-1"></i>Print</button>
+            <a href="exams/@ExamId/merit-list" class="btn btn-outline-primary"><i class="bi bi-trophy me-1"></i>Merit List</a>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label">Class</label>
+                    <select class="form-select" @bind="selectedClassId" @bind:after="LoadResults">
+                        <option value="0">Select Class...</option>
+                        @foreach (var c in classes)
+                        { <option value="@c.Id">@c.Name</option> }
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+    }
+    else if (resultRows.Count > 0)
+    {
+        <div class="card shadow-sm" id="resultsTable">
+            <div class="table-responsive">
+                <table class="table table-hover table-bordered align-middle mb-0 small">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Roll No</th>
+                            <th>Student Name</th>
+                            @foreach (var sub in subjects)
+                            {
+                                <th class="text-center">@sub.Name<br /><small>/@sub.TotalMarks</small></th>
+                            }
+                            <th class="text-center">Total</th>
+                            <th class="text-center">%</th>
+                            <th class="text-center">Grade</th>
+                            <th class="text-center">Result</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in resultRows.OrderByDescending(r => r.Percentage))
+                        {
+                            <tr>
+                                <td>@row.RollNumber</td>
+                                <td class="fw-semibold">@row.StudentName</td>
+                                @foreach (var sub in subjects)
+                                {
+                                    var mark = row.Marks.ContainsKey(sub.Id) ? row.Marks[sub.Id] : null;
+                                    <td class="text-center">
+                                        @if (mark?.IsAbsent == true) { <span class="text-danger">AB</span> }
+                                        else if (mark != null) { @mark.ObtainedMarks }
+                                        else { <span class="text-muted">—</span> }
+                                    </td>
+                                }
+                                <td class="text-center fw-semibold">@row.TotalObtained / @row.TotalMarks</td>
+                                <td class="text-center">@row.Percentage.ToString("F1")%</td>
+                                <td class="text-center"><span class="badge @GetGradeBadge(row.Grade)">@row.Grade</span></td>
+                                <td class="text-center">
+                                    @if (row.Passed) { <span class="badge bg-success">Pass</span> }
+                                    else { <span class="badge bg-danger">Fail</span> }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public int ExamId { get; set; }
+    Exam? exam;
+    List<Class> classes = [];
+    int selectedClassId;
+    List<SubjectHeader> subjects = [];
+    List<ResultRow> resultRows = [];
+    bool isLoading;
+
+    class SubjectHeader { public int Id; public string Name = ""; public decimal TotalMarks; }
+    class ResultRow
+    {
+        public int RollNumber; public string StudentName = "";
+        public Dictionary<int, ExamResult> Marks = [];
+        public decimal TotalObtained; public decimal TotalMarks; public decimal Percentage;
+        public string Grade = ""; public bool Passed;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        exam = await ExamService.GetByIdAsync(ExamId);
+        classes = await ClassService.GetAllAsync();
+    }
+
+    async Task LoadResults()
+    {
+        if (selectedClassId == 0) return;
+        isLoading = true;
+        var schedules = exam?.Schedules?.Where(s => s.ClassId == selectedClassId).ToList() ?? [];
+        subjects = schedules.Select(s => new SubjectHeader { Id = s.SubjectId, Name = s.Subject?.Name ?? "", TotalMarks = s.TotalMarks }).ToList();
+        var results = await ExamService.GetResultsByClassAsync(ExamId, selectedClassId);
+        var studentGroups = results.GroupBy(r => r.Student);
+        resultRows = studentGroups.Select(g =>
+        {
+            var student = g.Key;
+            var marks = g.ToDictionary(r => r.SubjectId);
+            var totalObtained = g.Where(r => !r.IsAbsent).Sum(r => r.ObtainedMarks);
+            var totalMarks = subjects.Sum(s => s.TotalMarks);
+            var pct = totalMarks > 0 ? totalObtained / totalMarks * 100 : 0;
+            return new ResultRow
+            {
+                RollNumber = student?.RollNumber ?? 0, StudentName = student?.FullName ?? "",
+                Marks = marks, TotalObtained = totalObtained, TotalMarks = totalMarks,
+                Percentage = pct, Grade = GetGrade(pct), Passed = pct >= 40
+            };
+        }).ToList();
+        isLoading = false;
+    }
+
+    string GetGrade(decimal pct) => pct switch
+    {
+        >= 90 => "A+", >= 80 => "A", >= 70 => "B+", >= 60 => "B",
+        >= 50 => "C", >= 40 => "D", _ => "F"
+    };
+
+    string GetGradeBadge(string g) => g switch
+    {
+        "A+" or "A" => "bg-success", "B+" or "B" => "bg-primary",
+        "C" => "bg-info", "D" => "bg-warning text-dark", _ => "bg-danger"
+    };
+
+    async Task PrintPage() => await JS.InvokeVoidAsync("printElement", "resultsTable");
+}
