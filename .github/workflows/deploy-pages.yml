@@ -27,14 +27,26 @@ jobs:
       - name: Publish Blazor WebAssembly demo
         run: dotnet publish SchoolManagementSystem.Static/SchoolManagementSystem.Static.csproj -c Release -o publish
 
-      - name: Set base path for the repository site
+      - name: Set base path for the site
         run: |
           WWW=publish/wwwroot
-          BASE="/${{ github.event.repository.name }}/"
+          if [ -f CNAME ]; then
+            # Custom domain (CNAME): the site is served from the domain root.
+            BASE="/"
+            SEGMENTS=0
+          else
+            # Default github.io project site: served from /<repo-name>/.
+            BASE="/${{ github.event.repository.name }}/"
+            SEGMENTS=1
+          fi
           sed -i "s#<base href=\"/\" />#<base href=\"${BASE}\" />#" "$WWW/index.html" "$WWW/404.html"
+          sed -i "s#var pathSegmentsToKeep = 1;#var pathSegmentsToKeep = ${SEGMENTS};#" "$WWW/404.html"
+          # Keep the custom domain set for the deployed site
+          if [ -f CNAME ]; then cp CNAME "$WWW/CNAME"; fi
           # Stop Jekyll from hiding folders that start with an underscore (_framework)
           touch "$WWW/.nojekyll"
           grep -q "<base href=\"${BASE}\" />" "$WWW/index.html"
+          grep -q "pathSegmentsToKeep = ${SEGMENTS};" "$WWW/404.html"
 
       - uses: actions/upload-pages-artifact@v3
         with:
