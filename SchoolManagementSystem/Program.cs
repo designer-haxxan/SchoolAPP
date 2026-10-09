@@ -1,9 +1,15 @@
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using QuestPDF.Infrastructure;
 using SchoolManagementSystem.Client.Pages;
 using SchoolManagementSystem.Components;
+using SchoolManagementSystem.Api;
 using SchoolManagementSystem.Components.Account;
 using SchoolManagementSystem.Data;
 using SchoolManagementSystem.Data.Models;
@@ -24,12 +30,37 @@ builder.Services.AddScoped<IdentityUserAccessor>();
 builder.Services.AddScoped<IdentityRedirectManager>();
 builder.Services.AddScoped<AuthenticationStateProvider, PersistingRevalidatingAuthenticationStateProvider>();
 
-builder.Services.AddAuthentication(options =>
+var authBuilder = builder.Services.AddAuthentication(options =>
     {
         options.DefaultScheme = IdentityConstants.ApplicationScheme;
         options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
-    })
-    .AddIdentityCookies();
+    });
+authBuilder.AddIdentityCookies();
+
+// Bearer tokens for the JSON API (/api/auth/*). Blazor pages keep using the cookie scheme.
+authBuilder.AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
+{
+    var jwtKey = builder.Configuration["Jwt:Key"];
+    // Without a configured key nothing can be validated; a random key guarantees no token passes.
+    var signingKey = jwtKey is { Length: >= 32 }
+        ? new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+        : new SymmetricSecurityKey(RandomNumberGenerator.GetBytes(32));
+
+    options.MapInboundClaims = false;
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "SchoolManagementSystem",
+        ValidateAudience = true,
+        ValidAudience = builder.Configuration["Jwt:Audience"] ?? "SchoolManagementSystem.Api",
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = signingKey,
+        ValidateLifetime = true,
+        ClockSkew = TimeSpan.FromMinutes(1),
+        NameClaimType = ClaimTypes.Name,
+        RoleClaimType = ClaimTypes.Role,
+    };
+});
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -61,6 +92,7 @@ builder.Services.AddAuthorization(options =>
 });
 
 // Register application services
+builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddScoped<ActivityLogService>();
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<DashboardService>();
@@ -104,6 +136,7 @@ app.MapRazorComponents<App>()
 
 // Add additional endpoints required by the Identity /Account Razor components.
 app.MapAdditionalIdentityEndpoints();
+app.MapAuthApi();
 
 // Seed database on startup
 using (var scope = app.Services.CreateScope())
