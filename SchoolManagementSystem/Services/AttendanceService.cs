@@ -7,12 +7,25 @@ namespace SchoolManagementSystem.Services;
 
 public class AttendanceService(ApplicationDbContext db)
 {
-    public async Task<List<StudentAttendance>> GetByDateAndSectionAsync(int sectionId, DateOnly date)
-        => await db.StudentAttendances
-            .Include(a => a.Student)
-            .Where(a => a.SectionId == sectionId && a.Date == date)
-            .OrderBy(a => a.Student.RollNumber)
-            .ToListAsync();
+    /// <summary>Minimum attendance for exam eligibility (common board and school rule in Pakistan).</summary>
+    public const int EligibilityThreshold = 75;
+
+    /// <summary>
+    /// Attendance percentage used everywhere in the app.
+    /// Present and Late count as attended. Holidays and Leave are not counted at all,
+    /// so a day off never lowers a student's percentage.
+    /// </summary>
+    public static decimal ComputePercentage(IEnumerable<StudentAttendance> records)
+    {
+        var counted = records.Where(r => r.Status is not (AttendanceStatus.Holiday or AttendanceStatus.Leave)).ToList();
+        if (counted.Count == 0) return 0;
+        var attended = counted.Count(r => r.Status is AttendanceStatus.Present or AttendanceStatus.Late);
+        return Math.Round((decimal)attended / counted.Count * 100, 1, MidpointRounding.AwayFromZero);
+    }
+
+    public static bool IsEligible(decimal percentage) => percentage >= EligibilityThreshold;
+
+    // ───────────── Students: marking and reading ─────────────
 
     public async Task<List<Student>> GetStudentsForAttendanceAsync(int sectionId)
         => await db.Students
@@ -20,27 +33,56 @@ public class AttendanceService(ApplicationDbContext db)
             .OrderBy(s => s.RollNumber)
             .ToListAsync();
 
-    public async Task SaveStudentAttendanceAsync(List<StudentAttendance> attendances, string markedBy)
+    public async Task<List<StudentAttendance>> GetByDateSectionAsync(DateOnly date, int sectionId) =>
+        await db.StudentAttendances.Where(a => a.Date == date && a.SectionId == sectionId).ToListAsync();
+
+    /// <summary>
+    /// Saves one day's register for a section. Existing rows for the same student and date are
+    /// updated, not duplicated, so re-marking a day is safe.
+    /// </summary>
+    public async Task SaveStudentAttendanceAsync(List<StudentAttendance> records, string? markedBy = null)
     {
-        var date = attendances.First().Date;
-        var sectionId = attendances.First().SectionId;
+        if (records.Count == 0) return;
 
+        var date = records[0].Date;
+        var studentIds = records.Select(r => r.StudentId).ToList();
+
+        // Look up by student and date across all sections: the table has a unique (StudentId, Date) index.
         var existing = await db.StudentAttendances
-            .Where(a => a.SectionId == sectionId && a.Date == date)
-            .ToListAsync();
+            .Where(a => a.Date == date && studentIds.Contains(a.StudentId))
+            .ToDictionaryAsync(a => a.StudentId);
 
-        db.StudentAttendances.RemoveRange(existing);
-
-        foreach (var a in attendances) a.MarkedBy = markedBy;
-        db.StudentAttendances.AddRange(attendances);
+        foreach (var r in records)
+        {
+            if (existing.TryGetValue(r.StudentId, out var row))
+            {
+                row.Status = r.Status;
+                row.Remarks = r.Remarks;
+                row.SectionId = r.SectionId;
+                row.MarkedBy = markedBy ?? row.MarkedBy;
+            }
+            else
+            {
+                r.MarkedBy = markedBy ?? r.MarkedBy;
+                db.StudentAttendances.Add(r);
+            }
+        }
         await db.SaveChangesAsync();
     }
 
-    public async Task<List<TeacherAttendance>> GetTeacherAttendanceAsync(DateOnly date)
-        => await db.TeacherAttendances
-            .Include(a => a.Teacher)
-            .Where(a => a.Date == date)
+    public async Task<List<StudentAttendance>> GetMonthlyStudentAttendanceAsync(int studentId, int month, int year)
+    {
+        var (start, end) = MonthRange(year, month);
+        return await db.StudentAttendances
+            .Where(a => a.StudentId == studentId && a.Date >= start && a.Date <= end)
+            .OrderBy(a => a.Date)
             .ToListAsync();
+    }
+
+    public async Task<decimal> GetAttendancePercentageAsync(int studentId, int month, int year)
+        => ComputePercentage(await GetMonthlyStudentAttendanceAsync(studentId, month, year));
+
+    // ───────────── Dashboard ─────────────
 
     public async Task<Dictionary<AttendanceStatus, int>> GetTodaySummaryAsync()
     {
@@ -51,38 +93,6 @@ public class AttendanceService(ApplicationDbContext db)
             .ToDictionaryAsync(g => g.Key, g => g.Count());
     }
 
-    public async Task<List<StudentAttendance>> GetMonthlyStudentAttendanceAsync(int studentId, int month, int year)
-        => await db.StudentAttendances
-            .Where(a => a.StudentId == studentId && a.Date.Month == month && a.Date.Year == year)
-            .OrderBy(a => a.Date)
-            .ToListAsync();
-
-    public async Task<decimal> GetAttendancePercentageAsync(int studentId, int month, int year)
-    {
-        var records = await db.StudentAttendances
-            .Where(a => a.StudentId == studentId && a.Date.Month == month && a.Date.Year == year)
-            .ToListAsync();
-        if (!records.Any()) return 0;
-        var present = records.Count(r => r.Status == AttendanceStatus.Present || r.Status == AttendanceStatus.Late);
-        return Math.Round((decimal)present / records.Count * 100, 1);
-    }
-
-    public async Task<Dictionary<int, decimal>> GetSectionAttendancePercentageAsync(int sectionId, int month, int year)
-    {
-        var records = await db.StudentAttendances
-            .Where(a => a.SectionId == sectionId && a.Date.Month == month && a.Date.Year == year)
-            .ToListAsync();
-
-        return records.GroupBy(r => r.StudentId).ToDictionary(
-            g => g.Key,
-            g =>
-            {
-                var total = g.Count();
-                var present = g.Count(r => r.Status == AttendanceStatus.Present || r.Status == AttendanceStatus.Late);
-                return total > 0 ? Math.Round((decimal)present / total * 100, 1) : 0m;
-            });
-    }
-
     public async Task<int> GetPresentTodayCountAsync()
     {
         var today = DateOnly.FromDateTime(DateTime.Today);
@@ -90,7 +100,103 @@ public class AttendanceService(ApplicationDbContext db)
             .CountAsync(a => a.Date == today && (a.Status == AttendanceStatus.Present || a.Status == AttendanceStatus.Late));
     }
 
-    // Leave applications
+    // ───────────── Section summary and export ─────────────
+
+    public async Task<List<AttendanceSummaryRow>> GetSectionSummaryAsync(int month, int year, int? classId)
+    {
+        var (start, end) = MonthRange(year, month);
+
+        var sectionsQ = db.Sections.Include(s => s.Class).Include(s => s.Students).AsQueryable();
+        if (classId.HasValue) sectionsQ = sectionsQ.Where(s => s.ClassId == classId.Value);
+
+        var sections = await sectionsQ.ToListAsync();
+        var result = new List<AttendanceSummaryRow>();
+
+        foreach (var section in sections)
+        {
+            var activeStudents = section.Students.Count(s => s.Status == StudentStatus.Active);
+            if (activeStudents == 0) continue;
+
+            var records = await db.StudentAttendances
+                .Where(a => a.SectionId == section.Id && a.Date >= start && a.Date <= end)
+                .ToListAsync();
+
+            var counted = records.Where(r => r.Status is not (AttendanceStatus.Holiday or AttendanceStatus.Leave)).ToList();
+            var workingDays = counted.Select(r => r.Date).Distinct().Count();
+            var attended = counted.Count(r => r.Status is AttendanceStatus.Present or AttendanceStatus.Late);
+            var absent = counted.Count(r => r.Status == AttendanceStatus.Absent);
+
+            result.Add(new AttendanceSummaryRow
+            {
+                ClassName = section.Class?.Name ?? "",
+                SectionName = section.Name,
+                TotalStudents = activeStudents,
+                WorkingDays = workingDays,
+                AvgPresent = workingDays > 0 ? attended / workingDays : 0,
+                AvgAbsent = workingDays > 0 ? absent / workingDays : 0,
+                Percentage = (int)Math.Round(ComputePercentage(records), MidpointRounding.AwayFromZero)
+            });
+        }
+        return result;
+    }
+
+    public async Task<byte[]> ExportSummaryToExcelAsync(int month, int year)
+    {
+        var rows = await GetSectionSummaryAsync(month, year, null);
+        using var wb = new XLWorkbook();
+        var ws = wb.Worksheets.Add("Attendance Summary");
+        ws.Cell(1, 1).Value = "Class"; ws.Cell(1, 2).Value = "Section";
+        ws.Cell(1, 3).Value = "Total Students"; ws.Cell(1, 4).Value = "Working Days";
+        ws.Cell(1, 5).Value = "Avg Present"; ws.Cell(1, 6).Value = "Percentage";
+        ws.Cell(1, 7).Value = $"Eligible (>= {EligibilityThreshold}%)";
+        for (int i = 0; i < rows.Count; i++)
+        {
+            var r = rows[i]; int row = i + 2;
+            ws.Cell(row, 1).Value = r.ClassName; ws.Cell(row, 2).Value = r.SectionName;
+            ws.Cell(row, 3).Value = r.TotalStudents; ws.Cell(row, 4).Value = r.WorkingDays;
+            ws.Cell(row, 5).Value = r.AvgPresent; ws.Cell(row, 6).Value = r.Percentage + "%";
+            ws.Cell(row, 7).Value = r.Percentage >= EligibilityThreshold ? "Yes" : "No";
+        }
+        ws.Row(1).Style.Font.Bold = true;
+        ws.Columns().AdjustToContents();
+        using var ms = new MemoryStream();
+        wb.SaveAs(ms);
+        return ms.ToArray();
+    }
+
+    // ───────────── Teachers ─────────────
+
+    public async Task<List<TeacherAttendance>> GetTeacherAttendanceAsync(DateOnly date)
+        => await db.TeacherAttendances
+            .Include(a => a.Teacher)
+            .Where(a => a.Date == date)
+            .ToListAsync();
+
+    public async Task<List<TeacherAttendance>> GetTeacherMonthlyAsync(int teacherId, int month, int year)
+    {
+        var (start, end) = MonthRange(year, month);
+        return await db.TeacherAttendances.Where(a => a.TeacherId == teacherId && a.Date >= start && a.Date <= end).ToListAsync();
+    }
+
+    public async Task<List<TeacherAttendance>> GetTeacherByDateAsync(DateOnly date) =>
+        await db.TeacherAttendances.Where(a => a.Date == date).ToListAsync();
+
+    public async Task SaveTeacherAttendanceAsync(List<TeacherAttendance> records)
+    {
+        foreach (var r in records)
+        {
+            var existing = await db.TeacherAttendances.FirstOrDefaultAsync(a => a.TeacherId == r.TeacherId && a.Date == r.Date);
+            if (existing != null)
+            {
+                existing.Status = r.Status; existing.CheckIn = r.CheckIn; existing.CheckOut = r.CheckOut;
+            }
+            else db.TeacherAttendances.Add(r);
+        }
+        await db.SaveChangesAsync();
+    }
+
+    // ───────────── Leave applications ─────────────
+
     public async Task<List<LeaveApplication>> GetLeaveApplicationsAsync(bool pendingOnly = false)
     {
         var query = db.LeaveApplications
@@ -118,121 +224,8 @@ public class AttendanceService(ApplicationDbContext db)
         if (leave != null) { leave.Status = LeaveStatus.Rejected; await db.SaveChangesAsync(); }
     }
 
-    // --- Additional methods ---
-
-    public async Task<List<StudentAttendance>> GetByDateSectionAsync(DateOnly date, int sectionId) =>
-        await db.StudentAttendances.Where(a => a.Date == date && a.SectionId == sectionId).ToListAsync();
-
-    public async Task SaveStudentAttendanceAsync(List<StudentAttendance> records)
-    {
-        foreach (var r in records)
-        {
-            var existing = await db.StudentAttendances.FirstOrDefaultAsync(a => a.StudentId == r.StudentId && a.Date == r.Date);
-            if (existing != null)
-            {
-                existing.Status = r.Status; existing.Remarks = r.Remarks;
-                existing.SectionId = r.SectionId;
-            }
-            else db.StudentAttendances.Add(r);
-        }
-        await db.SaveChangesAsync();
-    }
-
-    public async Task<List<TeacherAttendance>> GetTeacherMonthlyAsync(int teacherId, int month, int year)
-    {
-        var start = new DateOnly(year, month, 1);
-        var end = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
-        return await db.TeacherAttendances.Where(a => a.TeacherId == teacherId && a.Date >= start && a.Date <= end).ToListAsync();
-    }
-
-    public async Task<List<TeacherAttendance>> GetTeacherByDateAsync(DateOnly date) =>
-        await db.TeacherAttendances.Where(a => a.Date == date).ToListAsync();
-
-    public async Task SaveTeacherAttendanceAsync(List<TeacherAttendance> records)
-    {
-        foreach (var r in records)
-        {
-            var existing = await db.TeacherAttendances.FirstOrDefaultAsync(a => a.TeacherId == r.TeacherId && a.Date == r.Date);
-            if (existing != null)
-            {
-                existing.Status = r.Status; existing.CheckIn = r.CheckIn; existing.CheckOut = r.CheckOut;
-            }
-            else db.TeacherAttendances.Add(r);
-        }
-        await db.SaveChangesAsync();
-    }
-
-    public async Task<List<AttendanceSummaryRow>> GetSectionSummaryAsync(int month, int year, int? classId)
-    {
-        var start = new DateOnly(year, month, 1);
-        var end = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
-
-        var sectionsQ = db.Sections.Include(s => s.Class).Include(s => s.Students).AsQueryable();
-        if (classId.HasValue) sectionsQ = sectionsQ.Where(s => s.ClassId == classId.Value);
-
-        var sections = await sectionsQ.ToListAsync();
-        var result = new List<AttendanceSummaryRow>();
-
-        foreach (var section in sections)
-        {
-            var studentIds = section.Students?.Select(s => s.Id).ToList() ?? [];
-            if (studentIds.Count == 0) continue;
-
-            var records = await db.StudentAttendances
-                .Where(a => a.SectionId == section.Id && a.Date >= start && a.Date <= end)
-                .ToListAsync();
-
-            var workingDays = records.Select(r => r.Date).Distinct().Count();
-            var presentCount = records.Count(r => r.Status == AttendanceStatus.Present || r.Status == AttendanceStatus.Late);
-            var absentCount = records.Count(r => r.Status == AttendanceStatus.Absent);
-            var totalExpected = studentIds.Count * workingDays;
-            var pct = totalExpected > 0 ? (int)(presentCount * 100.0 / totalExpected) : 0;
-
-            result.Add(new AttendanceSummaryRow
-            {
-                ClassName = section.Class?.Name ?? "",
-                SectionName = section.Name,
-                TotalStudents = studentIds.Count,
-                WorkingDays = workingDays,
-                AvgPresent = workingDays > 0 ? presentCount / Math.Max(workingDays, 1) : 0,
-                AvgAbsent = workingDays > 0 ? absentCount / Math.Max(workingDays, 1) : 0,
-                Percentage = pct
-            });
-        }
-        return result;
-    }
-
-    public async Task<decimal> GetStudentAttendancePercentAsync(int studentId, int month, int year)
-    {
-        var start = new DateOnly(year, month, 1);
-        var end = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
-        var records = await db.StudentAttendances.Where(a => a.StudentId == studentId && a.Date >= start && a.Date <= end).ToListAsync();
-        if (records.Count == 0) return 0;
-        var present = records.Count(r => r.Status == AttendanceStatus.Present || r.Status == AttendanceStatus.Late);
-        return (decimal)present / records.Count * 100;
-    }
-
-    public async Task<byte[]> ExportSummaryToExcelAsync(int month, int year)
-    {
-        var rows = await GetSectionSummaryAsync(month, year, null);
-        using var wb = new XLWorkbook();
-        var ws = wb.Worksheets.Add("Attendance Summary");
-        ws.Cell(1, 1).Value = "Class"; ws.Cell(1, 2).Value = "Section";
-        ws.Cell(1, 3).Value = "Total Students"; ws.Cell(1, 4).Value = "Working Days";
-        ws.Cell(1, 5).Value = "Avg Present"; ws.Cell(1, 6).Value = "Percentage";
-        for (int i = 0; i < rows.Count; i++)
-        {
-            var r = rows[i]; int row = i + 2;
-            ws.Cell(row, 1).Value = r.ClassName; ws.Cell(row, 2).Value = r.SectionName;
-            ws.Cell(row, 3).Value = r.TotalStudents; ws.Cell(row, 4).Value = r.WorkingDays;
-            ws.Cell(row, 5).Value = r.AvgPresent; ws.Cell(row, 6).Value = r.Percentage + "%";
-        }
-        ws.Row(1).Style.Font.Bold = true;
-        ws.Columns().AdjustToContents();
-        using var ms = new MemoryStream();
-        wb.SaveAs(ms);
-        return ms.ToArray();
-    }
+    private static (DateOnly Start, DateOnly End) MonthRange(int year, int month)
+        => (new DateOnly(year, month, 1), new DateOnly(year, month, DateTime.DaysInMonth(year, month)));
 
     public class AttendanceSummaryRow
     {
