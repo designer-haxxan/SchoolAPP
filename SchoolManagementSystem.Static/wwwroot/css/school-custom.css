@@ -1222,6 +1222,49 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   RESPONSIVE LAYOUT — shell, headers, tables (all screen sizes)
+═══════════════════════════════════════════════════════════════ */
+img, svg, video { max-width: 100%; }
+.main-wrap { min-width: 0; }
+
+/* Desktop: fixed sidebar, content sits to its right exactly once */
+@media (min-width: 992px) {
+  .sidebar { position: fixed; top: 0; left: 0; }
+  .main-wrap { margin-left: var(--sb-width); }
+}
+
+/* Headers and toolbars wrap onto new lines instead of overflowing */
+.page-body .d-flex.justify-content-between,
+.page-body .d-flex.align-items-center { flex-wrap: wrap; gap: 10px; }
+.page-header { gap: 12px; }
+.page-header > div:first-child { min-width: 0; flex: 1 1 240px; }
+.page-header > .d-flex { flex-wrap: wrap; }
+.card-header.d-flex { flex-wrap: wrap; gap: 8px; }
+
+/* Wide tables scroll inside their card instead of pushing the page sideways */
+.card > .table-responsive,
+.table-responsive { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.card > .table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+@media (max-width: 991.98px) {
+  .topbar { gap: 8px; }
+  .page-title { font-size: 1.15rem; }
+}
+
+@media (max-width: 575.98px) {
+  .page-header { flex-direction: column; align-items: stretch; }
+  .page-header .btn { width: 100%; }
+  .page-header > .d-flex { width: 100%; }
+  .page-header > .d-flex .btn { flex: 1 1 auto; }
+  .card-footer.d-flex { flex-direction: column; align-items: stretch; gap: 8px; }
+  .modal-dialog { margin: .5rem; }
+  .stat-value { font-size: 1.2rem; }
+  /* Filter bars: two fields per row on phones instead of a long stack */
+  .card-body > .row > [class*="col-md-"] { flex: 0 0 50%; max-width: 50%; }
+  .card-body > .row > [class*="col-md-"] .btn { width: 100%; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
    PRINT
 ═══════════════════════════════════════════════════════════════ */
 @media print {
